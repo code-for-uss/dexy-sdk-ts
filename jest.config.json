@@ -1,0 +1,11 @@
+{
+  "collectCoverage": true,
+  "testEnvironment": "node",
+  "transformIgnorePatterns": ["node_modules/"],
+  "coverageReporters": ["lcov", "text-summary", "cobertura", "text"],
+  "preset": "ts-jest/presets/js-with-babel",
+  "transform": {
+    "^.+\\.(ts|tsx)?$": "ts-jest",
+    "^.+\\.(js|jsx)$": "babel-jest"
+  }
+}

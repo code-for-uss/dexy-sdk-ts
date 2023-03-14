@@ -1,4 +1,4 @@
-import { Address, ErgoBox, ErgoBoxes, ErgoTree, SecretKey, SecretKeys, Wallet} from "ergo-lib-wasm-nodejs";
+import { Address, ErgoBox, ErgoBoxes, ErgoTree, SecretKey, SecretKeys, Wallet} from "ergo-lib-wasm-browser";
 import { ArbitrageMint } from "../src";
 import defaultCtx from "./data/context.data";
 

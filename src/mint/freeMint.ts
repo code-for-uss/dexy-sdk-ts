@@ -12,23 +12,22 @@ import {
     Contract,
     ErgoBoxCandidateBuilder,
     Constant,
-    ErgoBoxCandidates, TokenAmount, SimpleBoxSelector, Tokens, Token, ErgoTree
+    ErgoBoxCandidates, TokenAmount, SimpleBoxSelector, Tokens, Token, ContextExtension
 } from "ergo-lib-wasm-browser";
-
-import { IMPLEMENTOR } from "../utils/const";
 
 class FreeMint {
     private readonly networkPrefix: NetworkPrefix
     private readonly T_free = 100n
     private readonly T_buffer = 5n
-    private readonly feeNum = 10n
+    private readonly bankFeeNum = 3n
+    private readonly buybackFeeNum = 2n
     private readonly feeDenom = 1000n
 
     constructor(networkPrefix: NetworkPrefix = NetworkPrefix.Mainnet) {
         this.networkPrefix = networkPrefix
     }
 
-    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number) {
+    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number) {
         const availableToMint = this.availableToMint(freeMintIn, lpBox, HEIGHT)
         if (mintValue > availableToMint)
             return undefined
@@ -36,6 +35,7 @@ class FreeMint {
             const inputs = ErgoBoxes.empty()
             inputs.add(freeMintIn)
             inputs.add(bankBoxIn)
+            inputs.add(buybackBoxIn)
             let userFund = 0n
             for (let i = 0; i < userBoxes.len(); i++) {
                 inputs.add(userBoxes.get(i));
@@ -57,9 +57,8 @@ class FreeMint {
                 target_tokens.add(new Token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount()))
             }
             outputs.add(freeMintOut.build())
-
             const bankBoxOut = new ErgoBoxCandidateBuilder(
-                BoxValue.from_i64(I64.from_str((BigInt(bankBoxIn.value().as_i64().to_str()) + this.ergNeededWithFee(mintValue, oracleBox)).toString())),
+                BoxValue.from_i64(I64.from_str((BigInt(bankBoxIn.value().as_i64().to_str()) + this.ergNeededBankBox(mintValue, oracleBox)).toString())),
                 Contract.new(bankBoxIn.ergo_tree()),
                 HEIGHT
             )
@@ -69,13 +68,14 @@ class FreeMint {
             target_tokens.add(new Token(bankBoxIn.tokens().get(1).id(), TokenAmount.from_i64(I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString()))))
             outputs.add(bankBoxOut.build())
 
-            const fee_implementor = this.implementorFee(mintValue, oracleBox)
-            const implementorBoxOut = new ErgoBoxCandidateBuilder(
-                BoxValue.from_i64(I64.from_str((fee_implementor).toString())),
-                Contract.new(ErgoTree.from_base16_bytes(IMPLEMENTOR.address)),
+            const buybackBoxOut = new ErgoBoxCandidateBuilder(
+                BoxValue.from_i64(I64.from_str((BigInt(buybackBoxIn.value().as_i64().to_str()) + this.ergNeededBuyBackBox(mintValue, oracleBox)).toString())),
+                Contract.new(buybackBoxIn.ergo_tree()),
                 HEIGHT
             )
-            outputs.add(implementorBoxOut.build())
+            buybackBoxOut.add_token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount())
+            target_tokens.add(new Token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount()))
+            outputs.add(buybackBoxOut.build())
 
             const target_output_selector = new SimpleBoxSelector()
             const target_outputs = target_output_selector.select(
@@ -83,9 +83,9 @@ class FreeMint {
                 BoxValue.from_i64(
                     I64.from_str((
                         BigInt(tx_fee) +
-                        BigInt(fee_implementor) +
                         BigInt(outputs.get(0).value().as_i64().as_num()) +
-                        BigInt(outputs.get(1).value().as_i64().as_num())
+                        BigInt(outputs.get(1).value().as_i64().as_num()) +
+                        BigInt(outputs.get(2).value().as_i64().as_num())
                     ).toString())),
                 target_tokens)
 
@@ -107,6 +107,10 @@ class FreeMint {
             data_inputs_ergoBoxes.add(oracleBox)
             data_inputs_ergoBoxes.add(lpBox)
 
+            const contextExtension = new ContextExtension()
+            contextExtension.set_pair(0, Constant.from_js(1))
+            tx_builder.set_context_extension(buybackBoxIn.box_id(), contextExtension)
+
             return {
                 tx:tx_builder.build(),
                 dataInputs: data_inputs_ergoBoxes,
@@ -114,24 +118,23 @@ class FreeMint {
             }
         }
     }
-
-    private ergNeededWithFee(mintValue: number, oracleBox: ErgoBox): bigint {
-        return BigInt(mintValue) * this.oracleRateWithFee(oracleBox)
+    ergNeededBankBox(mintValue: number, oracleBox: ErgoBox): bigint {
+        return BigInt(mintValue) * this.bankRate(oracleBox)
     }
 
-    private implementorFee(mintValue: number, oracleBox: ErgoBox): bigint {
-        return this.ergNeededWithFee(mintValue, oracleBox) * IMPLEMENTOR.fee_per / BigInt(1e4)
+    ergNeededBuyBackBox(mintValue: number, oracleBox: ErgoBox): bigint {
+        return BigInt(mintValue) * this.buybackRate(oracleBox)
     }
 
     ergNeeded(mintValue: number, oracleBox: ErgoBox): bigint {
-        return BigInt(mintValue) * this.oracleRateWithFee(oracleBox) * (IMPLEMENTOR.fee_per + BigInt(1))  / BigInt(1e4)
+        return this.ergNeededBankBox(mintValue, oracleBox) + this.ergNeededBuyBackBox(mintValue, oracleBox)
     }
 
     // TODO: transaction as input
-    transactionValidator(oracleBox: ErgoBox, freeMintIn: ErgoBox, freeMintOut: ErgoBox, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, HEIGHT: number) {
-        return this.validSuccessor(freeMintIn, freeMintOut, lpBox, bankBoxIn, bankBoxOut, HEIGHT) && this.validDelta(oracleBox, bankBoxIn, bankBoxOut) && this.validRateFreeMint(oracleBox, lpBox) && this.validAmount(lpBox, bankBoxIn, bankBoxOut, freeMintIn, HEIGHT)
+    transactionValidator(oracleBox: ErgoBox, freeMintIn: ErgoBox, freeMintOut: ErgoBox, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, HEIGHT: number) {
+        return this.validSuccessor(freeMintIn, freeMintOut, lpBox, bankBoxIn, bankBoxOut, HEIGHT) && this.validDelta(bankBoxIn, bankBoxOut, buybackBoxIn, buybackBoxOut, oracleBox) && this.validRateFreeMint(oracleBox, lpBox) && this.validAmount(lpBox, bankBoxIn, bankBoxOut, freeMintIn, HEIGHT)
     }
-
+    // checked
     validRateFreeMint(oracleBox: ErgoBox, lpBox: ErgoBox) {
         const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
         // check
@@ -140,19 +143,19 @@ class FreeMint {
         const lpRate = lpReservesX / lpReservesY
         return 98n * lpRate < oracleRateWithoutFee * 100n && oracleRateWithoutFee * 100n < 102n * lpRate
     }
-
-    validDelta(oracleBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
+    //checked
+    validBankDelta(oracleBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
         const dexyMinted = this.dexyMinted(bankBoxIn, bankBoxOut)
         const ergsAdded = BigInt(bankBoxOut.value().as_i64().to_str()) - BigInt(bankBoxIn.value().as_i64().to_str())
-        const oracleRateWithFee = this.oracleRateWithFee(oracleBox)
-        return ergsAdded >= dexyMinted * oracleRateWithFee && ergsAdded > 0
+        const bankRate = this.bankRate(oracleBox)
+        return ergsAdded >= dexyMinted * bankRate && ergsAdded > 0
     }
-
-    oracleRateWithFee(oracleBox: ErgoBox) {
+    //checked
+    bankRate(oracleBox: ErgoBox) {
         const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
-        return oracleRateWithoutFee * (this.feeNum + this.feeDenom) / this.feeDenom
+        return oracleRateWithoutFee * (this.bankFeeNum + this.feeDenom) / this.feeDenom
     }
-
+    // checked
     dexyMinted(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
         return BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(bankBoxOut.tokens().get(1).amount().as_i64().to_str())
     }
@@ -164,7 +167,20 @@ class FreeMint {
     lpReservesY(lpBox: ErgoBox) {
         return BigInt(lpBox.tokens().get(2).amount().as_i64().to_str())
     }
+    buybackErgsAdded(buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox) {
+        return BigInt(buybackBoxOut.value().as_i64().to_str()) - BigInt(buybackBoxIn.value().as_i64().to_str())
+    }
+    buybackRate(oracleBox: ErgoBox) {
+        const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
+        return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom
+    }
+    validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
+        return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(buybackBoxIn, buybackBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
+    }
 
+    validDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
+        return this.validBankDelta(oracleBox, bankBoxIn, bankBoxOut) && this.validBuybackDelta(bankBoxIn, bankBoxOut, buybackBoxIn, buybackBoxOut, oracleBox)
+    }
     validAmount(lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, freeMintIn: ErgoBox, HEIGHT: number) {
         const dexyMinted = this.dexyMinted(bankBoxIn, bankBoxOut)
         const availableToMint = this.availableToMint(freeMintIn, lpBox, HEIGHT)
@@ -175,11 +191,12 @@ class FreeMint {
         return BigInt(HEIGHT) > BigInt(freeMintIn.register_value(4).to_js())
     }
 
+    maxAllowedIfReset(lpBox: ErgoBox){
+        return this.lpReservesY(lpBox) / 100n
+    }
     availableToMint(freeMintIn: ErgoBox, lpBox: ErgoBox, HEIGHT: number) {
-        const lpReservesY = this.lpReservesY(lpBox)
-        const maxAllowedIfReset = lpReservesY / 100n
         const isCounterReset = this.isCounterReset(freeMintIn, HEIGHT)
-        return isCounterReset ? maxAllowedIfReset : BigInt(freeMintIn.register_value(5).to_js())
+        return isCounterReset ? this.maxAllowedIfReset(lpBox) : BigInt(freeMintIn.register_value(5).to_js())
     }
 
     validSuccessorR4(freeMintIn: ErgoBox, freeMintOut: ErgoBox, HEIGHT: number) {

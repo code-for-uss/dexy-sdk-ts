@@ -29,6 +29,7 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
-    "ergo-lib-wasm-browser": "^0.23.0"
+    "ergo-lib-wasm-browser": "^0.23.0",
+    "ergo-lib-wasm-nodejs": "^0.23.0"
   }
 }

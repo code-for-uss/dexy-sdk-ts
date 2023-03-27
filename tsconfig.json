@@ -8,10 +8,9 @@
     "declaration": true,
     "inlineSourceMap": true,
     "lib": ["es2017", "es2019", "DOM.Iterable", "DOM", "esnext"],
-    "esModuleInterop": true,
+    "esModuleInterop": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules/**"],
-  "compileOnSave": false,
-
+  "compileOnSave": false
 }

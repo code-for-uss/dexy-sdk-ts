@@ -1,23 +1,12 @@
-import {
+import { RustModule } from "@ergolabs/ergo-sdk";
+import type {
     Address,
-    ErgoBox, ErgoBoxes,
-    NetworkPrefix
+    ErgoBox, 
+    ErgoBoxes,
+    NetworkPrefix,
+    UnsignedTransaction
 } from "ergo-lib-wasm-browser";
-//     ErgoBox,
-//     TxBuilder,
-//     BoxSelection,
-//     ErgoBoxes,
-//     BoxValue,
-//     I64,
-//     Address,
-//     DataInputs,
-//     DataInput,
-//     Contract,
-//     ErgoBoxCandidateBuilder,
-//     Constant,
-//     ErgoBoxCandidates, TokenAmount, SimpleBoxSelector, Tokens, Token, ContextExtension
-// } from "ergo-lib-wasm-browser";
-import { RustModule } from "../utils";
+
 class FreeMint {
     private readonly networkPrefix: NetworkPrefix
     private readonly T_free = 100n
@@ -26,16 +15,16 @@ class FreeMint {
     private readonly buybackFeeNum = 2n
     private readonly feeDenom = 1000n
 
-    constructor(networkPrefix: NetworkPrefix = NetworkPrefix.Mainnet) {
+    constructor(networkPrefix: NetworkPrefix = RustModule.SigmaRust.NetworkPrefix.Mainnet) {
         this.networkPrefix = networkPrefix
     }
 
-    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number) {
+    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number): { tx: UnsignedTransaction, dataInputs: ErgoBoxes, inputs: ErgoBoxes } {
         const availableToMint = this.availableToMint(freeMintIn, lpBox, HEIGHT)
         if (mintValue > availableToMint)
             return undefined
         else {
-            const inputs = ErgoBoxes.empty()
+            const inputs = RustModule.SigmaRust.ErgoBoxes.empty()
             inputs.add(freeMintIn)
             inputs.add(bankBoxIn)
             inputs.add(buybackBoxIn)
@@ -106,7 +95,7 @@ class FreeMint {
             data_inputs.add(new RustModule.SigmaRust.DataInput(lpBox.box_id()));
             tx_builder.set_data_inputs(data_inputs);
 
-            const data_inputs_ergoBoxes = ErgoBoxes.empty()
+            const data_inputs_ergoBoxes = RustModule.SigmaRust.ErgoBoxes.empty()
             data_inputs_ergoBoxes.add(oracleBox)
             data_inputs_ergoBoxes.add(lpBox)
 

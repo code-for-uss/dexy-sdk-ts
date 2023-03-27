@@ -180,7 +180,7 @@ class ArbitrageMint {
         return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom
     }
     validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
-        return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(buybackBoxIn, buybackBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
+        return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(bankBoxIn, bankBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
     }
 
     validDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){

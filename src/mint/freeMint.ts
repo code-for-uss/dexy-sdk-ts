@@ -1,18 +1,10 @@
-import {
-    NetworkPrefix,
-    ErgoBox,
-    TxBuilder,
-    BoxSelection,
-    ErgoBoxes,
-    BoxValue,
-    I64,
+import { RustModule } from "@ergolabs/ergo-sdk";
+import type {
     Address,
-    DataInputs,
-    DataInput,
-    Contract,
-    ErgoBoxCandidateBuilder,
-    Constant,
-    ErgoBoxCandidates, TokenAmount, SimpleBoxSelector, Tokens, Token, ContextExtension
+    ErgoBox, 
+    ErgoBoxes,
+    NetworkPrefix,
+    UnsignedTransaction
 } from "ergo-lib-wasm-browser";
 
 class FreeMint {
@@ -23,16 +15,16 @@ class FreeMint {
     private readonly buybackFeeNum = 2n
     private readonly feeDenom = 1000n
 
-    constructor(networkPrefix: NetworkPrefix = NetworkPrefix.Mainnet) {
+    constructor(networkPrefix: NetworkPrefix = RustModule.SigmaRust.NetworkPrefix.Mainnet) {
         this.networkPrefix = networkPrefix
     }
 
-    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number) {
+    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number): { tx: UnsignedTransaction, dataInputs: ErgoBoxes, inputs: ErgoBoxes } {
         const availableToMint = this.availableToMint(freeMintIn, lpBox, HEIGHT)
         if (mintValue > availableToMint)
             return undefined
         else {
-            const inputs = ErgoBoxes.empty()
+            const inputs = RustModule.SigmaRust.ErgoBoxes.empty()
             inputs.add(freeMintIn)
             inputs.add(bankBoxIn)
             inputs.add(buybackBoxIn)
@@ -43,45 +35,45 @@ class FreeMint {
             }
             if (userFund < this.ergNeeded(mintValue, oracleBox))
                 return undefined
-            const target_tokens = new Tokens()
-            const outputs = ErgoBoxCandidates.empty();
-            const freeMintOut = new ErgoBoxCandidateBuilder(
+            const target_tokens = new RustModule.SigmaRust.Tokens()
+            const outputs = RustModule.SigmaRust.ErgoBoxCandidates.empty();
+            const freeMintOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
                 freeMintIn.value(),
-                Contract.new(freeMintIn.ergo_tree()),
+                RustModule.SigmaRust.Contract.new(freeMintIn.ergo_tree()),
                 HEIGHT
             )
-            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : Constant.from_i64(I64.from_str((BigInt(HEIGHT) + this.T_free).toString())))
-            freeMintOut.set_register_value(5, Constant.from_i64(I64.from_str((availableToMint - BigInt(mintValue)).toString())))
+            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : RustModule.SigmaRust.Constant.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(HEIGHT) + this.T_free).toString())))
+            freeMintOut.set_register_value(5, RustModule.SigmaRust.Constant.from_i64(RustModule.SigmaRust.I64.from_str((availableToMint - BigInt(mintValue)).toString())))
             for (let i = 0; i < freeMintIn.tokens().len(); i++) {
                 freeMintOut.add_token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount())
-                target_tokens.add(new Token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount()))
+                target_tokens.add(new RustModule.SigmaRust.Token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount()))
             }
             outputs.add(freeMintOut.build())
-            const bankBoxOut = new ErgoBoxCandidateBuilder(
-                BoxValue.from_i64(I64.from_str((BigInt(bankBoxIn.value().as_i64().to_str()) + this.ergNeededBankBox(mintValue, oracleBox)).toString())),
-                Contract.new(bankBoxIn.ergo_tree()),
+            const bankBoxOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
+                RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.value().as_i64().to_str()) + this.ergNeededBankBox(mintValue, oracleBox)).toString())),
+                RustModule.SigmaRust.Contract.new(bankBoxIn.ergo_tree()),
                 HEIGHT
             )
             bankBoxOut.add_token(bankBoxIn.tokens().get(0).id(), bankBoxIn.tokens().get(0).amount())
-            bankBoxOut.add_token(bankBoxIn.tokens().get(1).id(), TokenAmount.from_i64(I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString())))
-            target_tokens.add(new Token(bankBoxIn.tokens().get(0).id(), bankBoxIn.tokens().get(0).amount()))
-            target_tokens.add(new Token(bankBoxIn.tokens().get(1).id(), TokenAmount.from_i64(I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString()))))
+            bankBoxOut.add_token(bankBoxIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString())))
+            target_tokens.add(new RustModule.SigmaRust.Token(bankBoxIn.tokens().get(0).id(), bankBoxIn.tokens().get(0).amount()))
+            target_tokens.add(new RustModule.SigmaRust.Token(bankBoxIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString()))))
             outputs.add(bankBoxOut.build())
 
-            const buybackBoxOut = new ErgoBoxCandidateBuilder(
-                BoxValue.from_i64(I64.from_str((BigInt(buybackBoxIn.value().as_i64().to_str()) + this.ergNeededBuyBackBox(mintValue, oracleBox)).toString())),
-                Contract.new(buybackBoxIn.ergo_tree()),
+            const buybackBoxOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
+                RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(buybackBoxIn.value().as_i64().to_str()) + this.ergNeededBuyBackBox(mintValue, oracleBox)).toString())),
+                RustModule.SigmaRust.Contract.new(buybackBoxIn.ergo_tree()),
                 HEIGHT
             )
             buybackBoxOut.add_token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount())
-            target_tokens.add(new Token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount()))
+            target_tokens.add(new RustModule.SigmaRust.Token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount()))
             outputs.add(buybackBoxOut.build())
 
-            const target_output_selector = new SimpleBoxSelector()
+            const target_output_selector = new RustModule.SigmaRust.SimpleBoxSelector()
             const target_outputs = target_output_selector.select(
                 inputs,
-                BoxValue.from_i64(
-                    I64.from_str((
+                RustModule.SigmaRust.BoxValue.from_i64(
+                    RustModule.SigmaRust.I64.from_str((
                         BigInt(tx_fee) +
                         BigInt(outputs.get(0).value().as_i64().as_num()) +
                         BigInt(outputs.get(1).value().as_i64().as_num()) +
@@ -89,26 +81,26 @@ class FreeMint {
                     ).toString())),
                 target_tokens)
 
-            const tx_builder = TxBuilder.new(
-                new BoxSelection(inputs, target_outputs.change()),
+            const tx_builder = RustModule.SigmaRust.TxBuilder.new(
+                new RustModule.SigmaRust.BoxSelection(inputs, target_outputs.change()),
                 outputs,
                 HEIGHT,
-                BoxValue.from_i64(
-                    I64.from_str(tx_fee.toString())
+                RustModule.SigmaRust.BoxValue.from_i64(
+                    RustModule.SigmaRust.I64.from_str(tx_fee.toString())
                 ),
                 user_address
             )
-            const data_inputs = new DataInputs();
-            data_inputs.add(new DataInput(oracleBox.box_id()));
-            data_inputs.add(new DataInput(lpBox.box_id()));
+            const data_inputs = new RustModule.SigmaRust.DataInputs();
+            data_inputs.add(new RustModule.SigmaRust.DataInput(oracleBox.box_id()));
+            data_inputs.add(new RustModule.SigmaRust.DataInput(lpBox.box_id()));
             tx_builder.set_data_inputs(data_inputs);
 
-            const data_inputs_ergoBoxes = ErgoBoxes.empty()
+            const data_inputs_ergoBoxes = RustModule.SigmaRust.ErgoBoxes.empty()
             data_inputs_ergoBoxes.add(oracleBox)
             data_inputs_ergoBoxes.add(lpBox)
 
-            const contextExtension = new ContextExtension()
-            contextExtension.set_pair(0, Constant.from_js(1))
+            const contextExtension = new RustModule.SigmaRust.ContextExtension()
+            contextExtension.set_pair(0, RustModule.SigmaRust.Constant.from_js(1))
             tx_builder.set_context_extension(buybackBoxIn.box_id(), contextExtension)
 
             return {
@@ -175,7 +167,7 @@ class FreeMint {
         return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom
     }
     validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
-        return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(buybackBoxIn, buybackBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
+        return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(bankBoxIn, bankBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
     }
 
     validDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){

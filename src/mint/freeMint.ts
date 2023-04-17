@@ -1,7 +1,7 @@
 import { RustModule } from "@ergolabs/ergo-sdk";
 import type {
     Address,
-    ErgoBox, 
+    ErgoBox,
     ErgoBoxes,
     NetworkPrefix,
     UnsignedTransaction
@@ -42,7 +42,7 @@ class FreeMint {
                 RustModule.SigmaRust.Contract.new(freeMintIn.ergo_tree()),
                 HEIGHT
             )
-            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : RustModule.SigmaRust.Constant.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(HEIGHT) + this.T_free).toString())))
+            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : RustModule.SigmaRust.Constant.from_i32(Number(BigInt(HEIGHT) + this.T_free)))
             freeMintOut.set_register_value(5, RustModule.SigmaRust.Constant.from_i64(RustModule.SigmaRust.I64.from_str((availableToMint - BigInt(mintValue)).toString())))
             for (let i = 0; i < freeMintIn.tokens().len(); i++) {
                 freeMintOut.add_token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount())
@@ -128,7 +128,7 @@ class FreeMint {
     }
     // checked
     validRateFreeMint(oracleBox: ErgoBox, lpBox: ErgoBox) {
-        const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
+        const oracleRateWithoutFee = this.oracleRate(oracleBox) / 1000000n
         // check
         const lpReservesX = this.lpReservesX(lpBox)
         const lpReservesY = this.lpReservesY(lpBox)
@@ -144,9 +144,14 @@ class FreeMint {
     }
     //checked
     bankRate(oracleBox: ErgoBox) {
-        const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
-        return oracleRateWithoutFee * (this.bankFeeNum + this.feeDenom) / this.feeDenom
+        const oracleRateWithoutFee = this.oracleRate(oracleBox)
+        return oracleRateWithoutFee * (this.bankFeeNum + this.feeDenom) / this.feeDenom / 1000000n
     }
+
+    oracleRate(oracleBox: ErgoBox) {
+        return BigInt(oracleBox.register_value(4).to_js())
+    }
+
     // checked
     dexyMinted(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
         return BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(bankBoxOut.tokens().get(1).amount().as_i64().to_str())
@@ -163,8 +168,8 @@ class FreeMint {
         return BigInt(buybackBoxOut.value().as_i64().to_str()) - BigInt(buybackBoxIn.value().as_i64().to_str())
     }
     buybackRate(oracleBox: ErgoBox) {
-        const oracleRateWithoutFee = BigInt(oracleBox.register_value(4).to_js())
-        return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom
+        const oracleRateWithoutFee = this.oracleRate(oracleBox)
+        return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom / 1000000n
     }
     validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
         return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(bankBoxIn, bankBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0

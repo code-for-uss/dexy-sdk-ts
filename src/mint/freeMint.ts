@@ -42,7 +42,7 @@ class FreeMint {
                 RustModule.SigmaRust.Contract.new(freeMintIn.ergo_tree()),
                 HEIGHT
             )
-            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : RustModule.SigmaRust.Constant.from_i32(Number(BigInt(HEIGHT) + this.T_free)))
+            freeMintOut.set_register_value(4, !this.isCounterReset(freeMintIn, HEIGHT) ? freeMintIn.register_value(4) : RustModule.SigmaRust.Constant.from_i32(Number(BigInt(HEIGHT) + this.T_free + this.T_buffer)))
             freeMintOut.set_register_value(5, RustModule.SigmaRust.Constant.from_i64(RustModule.SigmaRust.I64.from_str((availableToMint - BigInt(mintValue)).toString())))
             for (let i = 0; i < freeMintIn.tokens().len(); i++) {
                 freeMintOut.add_token(freeMintIn.tokens().get(i).id(), freeMintIn.tokens().get(i).amount())
@@ -191,6 +191,7 @@ class FreeMint {
     maxAllowedIfReset(lpBox: ErgoBox){
         return this.lpReservesY(lpBox) / 100n
     }
+
     availableToMint(freeMintIn: ErgoBox, lpBox: ErgoBox, HEIGHT: number) {
         const isCounterReset = this.isCounterReset(freeMintIn, HEIGHT)
         return isCounterReset ? this.maxAllowedIfReset(lpBox) : BigInt(freeMintIn.register_value(5).to_js())

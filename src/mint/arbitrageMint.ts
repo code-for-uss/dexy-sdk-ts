@@ -203,14 +203,15 @@ class ArbitrageMint {
     isCounterReset(arbitrageMintIn: ErgoBox, HEIGHT: number) {
         return BigInt(HEIGHT) > BigInt(arbitrageMintIn.register_value(4).to_js())
     }
+
     maxAllowedIfReset(lpBox: ErgoBox, oracleBox: ErgoBox) {
         return (this.lpReservesX(lpBox) - this.oracleRateWithFee(oracleBox) * this.lpReservesY(lpBox)) / this.oracleRateWithFee(oracleBox)
     }
-    availableToMint(freeMintIn: ErgoBox, lpBox: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
-        const isCounterReset = this.isCounterReset(freeMintIn, HEIGHT)
-        return isCounterReset ? this.maxAllowedIfReset(lpBox, oracleBox) : BigInt(freeMintIn.register_value(5).to_js())
-    }
 
+    availableToMint(arbitrageMintIn: ErgoBox, lpBox: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
+        const isCounterReset = this.isCounterReset(arbitrageMintIn, HEIGHT)
+        return isCounterReset ? this.maxAllowedIfReset(lpBox, oracleBox) : BigInt(arbitrageMintIn.register_value(5).to_js())
+    }
 
     validSuccessorR4(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBox, HEIGHT: number) {
         const isCounterReset = this.isCounterReset(arbitrageMintIn, HEIGHT)

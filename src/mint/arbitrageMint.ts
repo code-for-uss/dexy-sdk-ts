@@ -4,9 +4,8 @@ import {
     ErgoBox,
     ErgoBoxes,
     Address,
-    UnsignedTransaction,
 } from "ergo-lib-wasm-browser";
-import { DexyUnsignedTX } from "../interfaces";
+import { DexyUnsignedTX } from "../models/interfaces";
 
 class ArbitrageMint {
     private readonly networkPrefix: NetworkPrefix

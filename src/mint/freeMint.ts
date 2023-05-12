@@ -3,10 +3,9 @@ import type {
     Address,
     ErgoBox,
     ErgoBoxes,
-    NetworkPrefix,
-    UnsignedTransaction
+    NetworkPrefix
 } from "ergo-lib-wasm-browser";
-import { DexyUnsignedTX } from "../interfaces";
+import { DexyUnsignedTX } from "../models/interfaces";
 
 class FreeMint {
     private readonly networkPrefix: NetworkPrefix

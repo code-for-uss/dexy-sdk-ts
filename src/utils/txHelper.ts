@@ -1,5 +1,5 @@
 import { JSONBI, UnsignedErgoTx, UnsignedInput } from "@ergolabs/ergo-sdk";
-import { DexyUnsignedTX } from "../models/interfaces";
+import { DexyUnsignedTX } from "../models/types";
 
 const unsignedTxConnectorProxy = (dexyUnsignedTx: DexyUnsignedTX): UnsignedErgoTx => {
     const unsignedTx = JSONBI.parse(dexyUnsignedTx.tx.to_json());

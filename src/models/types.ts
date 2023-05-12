@@ -1,7 +1,7 @@
 import { ErgoBoxes, UnsignedTransaction } from "ergo-lib-wasm-browser";
 
-export interface DexyUnsignedTX {
+export type DexyUnsignedTX = {
     tx: UnsignedTransaction,
     dataInputs: ErgoBoxes,
     inputs: ErgoBoxes
-}
+};

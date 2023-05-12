@@ -6,6 +6,7 @@ import type {
     NetworkPrefix,
     UnsignedTransaction
 } from "ergo-lib-wasm-browser";
+import { DexyUnsignedTX } from "../interfaces";
 
 class FreeMint {
     private readonly networkPrefix: NetworkPrefix
@@ -19,7 +20,7 @@ class FreeMint {
         this.networkPrefix = networkPrefix
     }
 
-    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number): { tx: UnsignedTransaction, dataInputs: ErgoBoxes, inputs: ErgoBoxes } {
+    createFreeMintTransaction(tx_fee: number, mintValue: number, freeMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, HEIGHT: number): DexyUnsignedTX {
         const availableToMint = this.availableToMint(freeMintIn, lpBox, HEIGHT)
         if (mintValue > availableToMint)
             return undefined

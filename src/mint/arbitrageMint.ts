@@ -6,6 +6,7 @@ import {
     Address,
     UnsignedTransaction,
 } from "ergo-lib-wasm-browser";
+import { DexyUnsignedTX } from "../interfaces";
 
 class ArbitrageMint {
     private readonly networkPrefix: NetworkPrefix
@@ -20,7 +21,7 @@ class ArbitrageMint {
         this.networkPrefix = networkPrefix
     }
 
-    createArbitrageMintTransaction(tx_fee: number, mintValue: number, arbitrageMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, tracking101Box:ErgoBox, HEIGHT: number): { tx: UnsignedTransaction, dataInputs: ErgoBoxes, inputs: ErgoBoxes } {
+    createArbitrageMintTransaction(tx_fee: number, mintValue: number, arbitrageMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, tracking101Box:ErgoBox, HEIGHT: number): DexyUnsignedTX {
         const availableToMint = this.availableToMint(arbitrageMintIn, lpBox, oracleBox, HEIGHT)
         if (mintValue > availableToMint)
             return undefined

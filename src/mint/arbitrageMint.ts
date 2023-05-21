@@ -4,6 +4,7 @@ import {
     ErgoBox,
     ErgoBoxes,
     Address,
+    ErgoBoxCandidate
 } from "ergo-lib-wasm-browser";
 import { DexyUnsignedTX } from "../models/types";
 
@@ -20,10 +21,10 @@ class ArbitrageMint {
         this.networkPrefix = networkPrefix
     }
 
-    createArbitrageMintTransaction(tx_fee: number, mintValue: number, arbitrageMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, tracking101Box:ErgoBox, HEIGHT: number): DexyUnsignedTX {
+    createArbitrageMintTransaction(tx_fee: number, mintValue: number, arbitrageMintIn: ErgoBox, buybackBoxIn: ErgoBox, bankBoxIn: ErgoBox, userBoxes: ErgoBoxes, lpBox: ErgoBox, user_address: Address, oracleBox: ErgoBox, tracking101Box: ErgoBox, HEIGHT: number): DexyUnsignedTX {
         const availableToMint = this.availableToMint(arbitrageMintIn, lpBox, oracleBox, HEIGHT)
         if (mintValue > availableToMint)
-            return undefined
+            throw new Error("Mint Value is more than available to mint")
         else {
             const inputs = RustModule.SigmaRust.ErgoBoxes.empty()
             inputs.add(arbitrageMintIn)
@@ -35,7 +36,7 @@ class ArbitrageMint {
                 userFund += BigInt(userBoxes.get(i).value().as_i64().to_str())
             }
             if (userFund < this.ergNeeded(mintValue, oracleBox))
-                return undefined
+                throw new Error("Not enough ERG in user boxes")
             const target_tokens = new RustModule.SigmaRust.Tokens()
             const outputs = RustModule.SigmaRust.ErgoBoxCandidates.empty();
             const arbitrageMintOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
@@ -49,7 +50,8 @@ class ArbitrageMint {
                 arbitrageMintOut.add_token(arbitrageMintIn.tokens().get(i).id(), arbitrageMintIn.tokens().get(i).amount())
                 target_tokens.add(new RustModule.SigmaRust.Token(arbitrageMintIn.tokens().get(i).id(), arbitrageMintIn.tokens().get(i).amount()))
             }
-            outputs.add(arbitrageMintOut.build())
+            const arbitrageMintOutBuild = arbitrageMintOut.build()
+            outputs.add(arbitrageMintOutBuild)
 
             const bankBoxOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
                 RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.value().as_i64().to_str()) + this.ergNeededBankBox(mintValue, oracleBox)).toString())),
@@ -60,7 +62,8 @@ class ArbitrageMint {
             bankBoxOut.add_token(bankBoxIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString())))
             target_tokens.add(new RustModule.SigmaRust.Token(bankBoxIn.tokens().get(0).id(), bankBoxIn.tokens().get(0).amount()))
             target_tokens.add(new RustModule.SigmaRust.Token(bankBoxIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(mintValue)).toString()))))
-            outputs.add(bankBoxOut.build())
+            const bankBoxOutBuild = bankBoxOut.build()
+            outputs.add(bankBoxOutBuild)
 
             const buybackBoxOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
                 RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(buybackBoxIn.value().as_i64().to_str()) + this.ergNeededBuyBackBox(mintValue, oracleBox)).toString())),
@@ -69,7 +72,19 @@ class ArbitrageMint {
             )
             buybackBoxOut.add_token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount())
             target_tokens.add(new RustModule.SigmaRust.Token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount()))
-            outputs.add(buybackBoxOut.build())
+            const buybackBoxOutBuild = buybackBoxOut.build()
+            outputs.add(buybackBoxOutBuild)
+
+            if (!this.validSuccessor(arbitrageMintIn, arbitrageMintOutBuild, lpBox, bankBoxIn, bankBoxOutBuild, oracleBox, HEIGHT))
+                throw new Error("Invalid successor")
+            else if (!this.validDelta(bankBoxIn, bankBoxOutBuild, buybackBoxIn, buybackBoxOutBuild, oracleBox))
+                throw new Error("Invalid delta")
+            else if (!this.validAmount(lpBox, bankBoxIn, bankBoxOutBuild, arbitrageMintIn, oracleBox, HEIGHT))
+                throw new Error("Invalid amount")
+            else if (!this.validDelay(tracking101Box, HEIGHT))
+                throw new Error("Invalid delay")
+            else if (!this.validThreshold(lpBox, oracleBox))
+                throw new Error("Invalid threshold")
 
             const target_output_selector = new RustModule.SigmaRust.SimpleBoxSelector()
             const target_outputs = target_output_selector.select(
@@ -107,8 +122,10 @@ class ArbitrageMint {
             contextExtension.set_pair(0, RustModule.SigmaRust.Constant.from_js(1))
             tx_builder.set_context_extension(buybackBoxIn.box_id(), contextExtension)
 
+            const transaction = tx_builder.build()
+
             return {
-                tx:tx_builder.build(),
+                tx: transaction,
                 dataInputs: data_inputs_ergoBoxes,
                 inputs: inputs
             }
@@ -128,14 +145,15 @@ class ArbitrageMint {
     }
 
     // // TODO: transaction as input
-    transactionValidator(oracleBox: ErgoBox, arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBox, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, tracking101Box: ErgoBox, HEIGHT: number) {
-        return this.validSuccessor(arbitrageMintIn, arbitrageMintOut, lpBox, bankBoxIn, bankBoxOut, oracleBox, HEIGHT) && this.validDelta(bankBoxIn, bankBoxOut, buybackBoxIn, buybackBoxOut, oracleBox) && this.validAmount(lpBox, bankBoxIn, bankBoxOut, arbitrageMintIn, oracleBox, HEIGHT) && this.validDelay(tracking101Box, HEIGHT) && this.validThreshold(lpBox,oracleBox)
+    transactionValidator(oracleBox: ErgoBox, arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBoxCandidate, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBoxCandidate, tracking101Box: ErgoBox, HEIGHT: number) {
+        return this.validSuccessor(arbitrageMintIn, arbitrageMintOut, lpBox, bankBoxIn, bankBoxOut, oracleBox, HEIGHT) && this.validDelta(bankBoxIn, bankBoxOut, buybackBoxIn, buybackBoxOut, oracleBox) && this.validAmount(lpBox, bankBoxIn, bankBoxOut, arbitrageMintIn, oracleBox, HEIGHT) && this.validDelay(tracking101Box, HEIGHT) && this.validThreshold(lpBox, oracleBox)
     }
 
-    validDelay(tracking101Box: ErgoBox, HEIGHT: number){
+    validDelay(tracking101Box: ErgoBox, HEIGHT: number) {
         return BigInt(tracking101Box.register_value(7).to_i64().to_str()) < BigInt(HEIGHT) - this.T_arb
     }
-    validThreshold(lpBox:ErgoBox, oracleBox: ErgoBox){
+
+    validThreshold(lpBox: ErgoBox, oracleBox: ErgoBox) {
         return this.lpRate(lpBox) * 100n > this.thresholdPercent * this.oracleRateWithFee(oracleBox)
     }
 
@@ -147,18 +165,21 @@ class ArbitrageMint {
         return BigInt(oracleBox.register_value(4).to_js())
     }
 
-    dexyMinted(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
+    dexyMinted(bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate) {
         return BigInt(bankBoxIn.tokens().get(1).amount().as_i64().to_str()) - BigInt(bankBoxOut.tokens().get(1).amount().as_i64().to_str())
     }
-    bankErgsAdded(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
+
+    bankErgsAdded(bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate) {
         return BigInt(bankBoxOut.value().as_i64().to_str()) - BigInt(bankBoxIn.value().as_i64().to_str())
     }
-    validBankDelta(oracleBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox) {
+
+    validBankDelta(oracleBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate) {
         const dexyMinted = this.dexyMinted(bankBoxIn, bankBoxOut)
         const ergsAdded = this.bankErgsAdded(bankBoxIn, bankBoxOut)
         const bankRate = this.bankRate(oracleBox)
         return ergsAdded >= dexyMinted * bankRate && ergsAdded > 0
     }
+
     //checked
     bankRate(oracleBox: ErgoBox) {
         const oracleRateWithoutFee = this.oracleRate(oracleBox)
@@ -177,7 +198,7 @@ class ArbitrageMint {
         return this.lpReservesX(lpBox) / this.lpReservesY(lpBox)
     }
 
-    buybackErgsAdded(buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox) {
+    buybackErgsAdded(buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBoxCandidate) {
         return BigInt(buybackBoxOut.value().as_i64().to_str()) - BigInt(buybackBoxIn.value().as_i64().to_str())
     }
 
@@ -186,15 +207,15 @@ class ArbitrageMint {
         return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom / 1000000n
     }
 
-    validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
+    validBuybackDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox) {
         return this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) >= this.dexyMinted(bankBoxIn, bankBoxOut) * this.buybackRate(oracleBox) && this.buybackErgsAdded(buybackBoxIn, buybackBoxOut) > 0
     }
 
-    validDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBox, oracleBox: ErgoBox){
+    validDelta(bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, buybackBoxIn: ErgoBox, buybackBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox) {
         return this.validBankDelta(oracleBox, bankBoxIn, bankBoxOut) && this.validBuybackDelta(bankBoxIn, bankBoxOut, buybackBoxIn, buybackBoxOut, oracleBox)
     }
 
-    validAmount(lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, arbitrageMintIn: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
+    validAmount(lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, arbitrageMintIn: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
         const dexyMinted = this.dexyMinted(bankBoxIn, bankBoxOut)
         const availableToMint = this.availableToMint(arbitrageMintIn, lpBox, oracleBox, HEIGHT)
         return dexyMinted <= availableToMint
@@ -213,7 +234,8 @@ class ArbitrageMint {
         return isCounterReset ? this.maxAllowedIfReset(lpBox, oracleBox) : BigInt(arbitrageMintIn.register_value(5).to_js())
     }
 
-    validSuccessorR4(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBox, HEIGHT: number) {
+
+    validSuccessorR4(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBoxCandidate, HEIGHT: number) {
         const isCounterReset = this.isCounterReset(arbitrageMintIn, HEIGHT)
         if (!isCounterReset) {
             return arbitrageMintOut.register_value(4).encode_to_base16() === arbitrageMintIn.register_value(4).encode_to_base16()
@@ -222,11 +244,11 @@ class ArbitrageMint {
         }
     }
 
-    validSuccessorR5(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBox, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
+    validSuccessorR5(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBoxCandidate, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox, HEIGHT: number) {
         return BigInt(arbitrageMintOut.register_value(5).to_js()) === this.availableToMint(arbitrageMintIn, lpBox, oracleBox, HEIGHT) - this.dexyMinted(bankBoxIn, bankBoxOut)
     }
 
-    validSuccessor(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBox, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBox, oracleBox: ErgoBox,HEIGHT: number) {
+    validSuccessor(arbitrageMintIn: ErgoBox, arbitrageMintOut: ErgoBoxCandidate, lpBox: ErgoBox, bankBoxIn: ErgoBox, bankBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox, HEIGHT: number) {
         return arbitrageMintOut.ergo_tree().to_base16_bytes() === arbitrageMintIn.ergo_tree().to_base16_bytes() && BigInt(arbitrageMintOut.value().as_i64().to_str()) >= BigInt(arbitrageMintIn.value().as_i64().to_str()) && this.validSuccessorR4(arbitrageMintIn, arbitrageMintOut, HEIGHT) && this.validSuccessorR5(arbitrageMintIn, arbitrageMintOut, lpBox, bankBoxIn, bankBoxOut, oracleBox, HEIGHT)
     }
 }

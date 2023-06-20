@@ -3,20 +3,15 @@ import {
     Address,
     ErgoBox,
     ErgoBoxes,
-    NetworkPrefix,
     ErgoBoxCandidate
 } from "ergo-lib-wasm-browser";
 import { DexyUnsignedTX } from "./models/types";
 
-// TODO: should be test on chain
+// TODO: should be test
 class Tracking {
-    private readonly networkPrefix: NetworkPrefix
     private readonly threshold = 3
     private readonly maxInt = 2147483647
 
-    constructor(networkPrefix: NetworkPrefix = RustModule.SigmaRust.NetworkPrefix.Mainnet) {
-        this.networkPrefix = networkPrefix
-    }
 
     createTrackingTransaction(tx_fee: number, lpIn: ErgoBox, oracleBox: ErgoBox, trackingBox: ErgoBox, userBoxes: ErgoBoxes, user_address: Address, HEIGHT: number): DexyUnsignedTX {
         const inputs = RustModule.SigmaRust.ErgoBoxes.empty()

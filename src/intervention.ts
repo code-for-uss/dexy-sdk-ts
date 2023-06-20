@@ -3,20 +3,15 @@ import {
     Address,
     ErgoBox,
     ErgoBoxes,
-    NetworkPrefix,
     ErgoBoxCandidate
 } from "ergo-lib-wasm-browser";
 import { DexyUnsignedTX } from "./models/types";
 
 // TODO: Tested on chain but need to add unit test for this scenario
 class Intervention {
-    private readonly networkPrefix: NetworkPrefix
     private readonly T_int = 20
     private readonly thresholdPercent = 98n
 
-    constructor(networkPrefix: NetworkPrefix = RustModule.SigmaRust.NetworkPrefix.Mainnet) {
-        this.networkPrefix = networkPrefix
-    }
 
     createInterventionTransaction(tx_fee: number, lpIn: ErgoBox, bankBoxIn: ErgoBox, interventionIn: ErgoBox, oracleBox: ErgoBox, tracking98Box: ErgoBox, userBoxes: ErgoBoxes, user_address: Address, HEIGHT: number): DexyUnsignedTX {
         const erg_change = BigInt(bankBoxIn.value().as_i64().to_str()) / 100n

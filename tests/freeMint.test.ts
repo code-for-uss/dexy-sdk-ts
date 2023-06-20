@@ -1,5 +1,5 @@
 import { Address, ErgoBox, ErgoBoxes, ErgoTree, SecretKey, SecretKeys, Wallet} from "ergo-lib-wasm-browser";
-import { FreeMint } from "../src";
+import { FreeMint, Mint } from "../src";
 import defaultCtx from "./data/context.data";
 
 // TODO: tests don't work due to a problem between jest and browser wasm
@@ -125,7 +125,9 @@ describe('Free Mint', () => {
                 ))
             }
             const userBoxes = new ErgoBoxes(data.userIn)
-            const freeMint = new FreeMint()
+            const mint = new Mint(data.oracleBox, data.lpIn)
+            await expect(mint.mintType()).toEqual("freeMint")
+            const freeMint = new FreeMint(data.oracleBox, data.lpIn)
             const freeMintTx = freeMint.createFreeMintTransaction(
                 data.txFee,
                 35000,
@@ -133,12 +135,9 @@ describe('Free Mint', () => {
                 data.buyBackIn,
                 data.bankIn,
                 userBoxes,
-                data.lpIn,
                 Address.recreate_from_ergo_tree(ErgoTree.from_base16_bytes("10010101d17300")),
-                data.oracleBox,
                 123414
             )
-
             const alice_secret = SecretKey.dlog_from_bytes(Uint8Array.from(Buffer.from("f96adda371be9dd3578f532653067529b4912abe4707bd0e860bd36229714293", "hex")));
             const sks_alice = new SecretKeys();
             sks_alice.add(alice_secret);

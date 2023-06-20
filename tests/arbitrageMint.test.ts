@@ -1,5 +1,5 @@
 import { Address, ErgoBox, ErgoBoxes, ErgoTree, SecretKey, SecretKeys, Wallet} from "ergo-lib-wasm-browser";
-import { ArbitrageMint } from "../src";
+import { ArbitrageMint, Mint } from "../src";
 import defaultCtx from "./data/context.data";
 
 // TODO: tests don't work due to a problem between jest and browser wasm
@@ -147,7 +147,9 @@ describe('Arbitrage Mint', () => {
                 ))
             }
             const userBoxes = new ErgoBoxes(data.userIn)
-            const arbitrageMint = new ArbitrageMint()
+            const mint = new Mint(data.oracleBox, data.lpIn)
+            await expect(mint.mintType()).toEqual("arbMint")
+            const arbitrageMint = new ArbitrageMint(data.oracleBox, data.lpIn)
             const arbitrageMintTx = arbitrageMint.createArbitrageMintTransaction(
                 data.txFee,
                 35000,
@@ -155,9 +157,7 @@ describe('Arbitrage Mint', () => {
                 data.buybackBox,
                 data.bankIn,
                 userBoxes,
-                data.lpIn,
                 Address.recreate_from_ergo_tree(ErgoTree.from_base16_bytes("10010101d17300")),
-                data.oracleBox,
                 data.tracking101,
                 123414
             )

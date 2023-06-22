@@ -1,8 +1,8 @@
 import type { ErgoBox, ErgoBoxCandidate } from "ergo-lib-wasm-browser";
 
 abstract class Dexy {
-    oracleBox
-    lpBox
+    protected oracleBox
+    protected lpBox
     protected readonly thresholdPercent = 101n
     private readonly buybackFeeNum = 2n
     private readonly feeDenom = 1000n

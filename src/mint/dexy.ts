@@ -81,7 +81,7 @@ abstract class Dexy {
     validRateFreeMint() {
         const oracleRateWithoutFee = this.oracleRate() / 1000000n
         const lpRate = this.lpRate()
-        return 98n * lpRate < oracleRateWithoutFee * 100n && oracleRateWithoutFee * 100n < 102n * lpRate
+        return oracleRateWithoutFee * 98n < lpRate * 100n
     }
 }
 

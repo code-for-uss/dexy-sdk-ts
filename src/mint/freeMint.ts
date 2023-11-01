@@ -9,7 +9,7 @@ import { Dexy } from "./dexy";
 import { DexyUnsignedTX } from "../models/types";
 
 class FreeMint extends Dexy {
-    private readonly T_free = 100n
+    private readonly T_free = 360n
     private readonly T_buffer = 5n
 
     constructor(oracleBox: ErgoBox, lpBox: ErgoBox) {

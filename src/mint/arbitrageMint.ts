@@ -66,7 +66,9 @@ class ArbitrageMint extends Dexy {
                 HEIGHT
             )
             buybackBoxOut.add_token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount())
+            buybackBoxOut.add_token(buybackBoxIn.tokens().get(1).id(), buybackBoxIn.tokens().get(1).amount())
             target_tokens.add(new RustModule.SigmaRust.Token(buybackBoxIn.tokens().get(0).id(), buybackBoxIn.tokens().get(0).amount()))
+            target_tokens.add(new RustModule.SigmaRust.Token(buybackBoxIn.tokens().get(1).id(), buybackBoxIn.tokens().get(1).amount()))
             const buybackBoxOutBuild = buybackBoxOut.build()
             outputs.add(buybackBoxOutBuild)
 
@@ -93,8 +95,18 @@ class ArbitrageMint extends Dexy {
                     ).toString())),
                 target_tokens)
 
+            // TODO: There is a bug in ergo-lib-wasm  BoxSelection, inputs are shuffling
+            const validBoxIds = []
+            for (let i = 0; i < target_outputs.boxes().len(); i++) {
+                validBoxIds.push(target_outputs.boxes().get(i).box_id().to_str())
+            }
+            const validInputs = RustModule.SigmaRust.ErgoBoxes.empty()
+            for (let i = 0; i < inputs.len(); i++) {
+                if (validBoxIds.includes(inputs.get(i).box_id().to_str())) validInputs.add(inputs.get(i))
+            }
+
             const tx_builder = RustModule.SigmaRust.TxBuilder.new(
-                new RustModule.SigmaRust.BoxSelection(inputs, target_outputs.change()),
+                new RustModule.SigmaRust.BoxSelection(validInputs, target_outputs.change()),
                 outputs,
                 HEIGHT,
                 RustModule.SigmaRust.BoxValue.from_i64(
@@ -122,7 +134,7 @@ class ArbitrageMint extends Dexy {
             return {
                 tx: transaction,
                 dataInputs: data_inputs_ergoBoxes,
-                inputs: inputs
+                inputs: validInputs
             }
         }
     }

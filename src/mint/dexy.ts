@@ -15,7 +15,7 @@ abstract class Dexy {
 
     bankRate() {
         const oracleRateWithoutFee = this.oracleRate()
-        return oracleRateWithoutFee * (this.bankFeeNum + this.feeDenom) / this.feeDenom / 1000000n
+        return oracleRateWithoutFee * (this.bankFeeNum + this.feeDenom) / this.feeDenom
     }
 
     ergNeededBankBox(mintValue: number): bigint {
@@ -62,7 +62,7 @@ abstract class Dexy {
     }
 
     oracleRate() {
-        return BigInt(this.oracleBox.register_value(4).to_js())
+        return BigInt(this.oracleBox.register_value(4).to_js()) / 1000000n
     }
 
     lpRate() {
@@ -71,7 +71,7 @@ abstract class Dexy {
 
     buybackRate() {
         const oracleRateWithoutFee = this.oracleRate()
-        return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom / 1000000n
+        return oracleRateWithoutFee * (this.buybackFeeNum) / this.feeDenom
     }
 
     validThreshold() {
@@ -79,7 +79,7 @@ abstract class Dexy {
     }
 
     validRateFreeMint() {
-        const oracleRateWithoutFee = this.oracleRate() / 1000000n
+        const oracleRateWithoutFee = this.oracleRate()
         const lpRate = this.lpRate()
         return oracleRateWithoutFee * 98n < lpRate * 100n
     }

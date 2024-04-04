@@ -1,170 +1,180 @@
-import { RustModule } from "@ergolabs/ergo-sdk";
+import { Amount, Box, BoxCandidate, ensureUTxOBigInt } from "@fleet-sdk/common";
 import {
-    Address,
-    ErgoBox,
-    ErgoBoxes,
-    ErgoBoxCandidate
-} from "ergo-lib-wasm-browser";
-import { DexyUnsignedTX } from "./models/types";
+  ErgoAddress,
+  ErgoUnsignedTransaction,
+  InputsCollection,
+  OutputBuilder,
+  OutputsCollection,
+  TransactionBuilder,
+} from "@fleet-sdk/core";
+import { Dexy } from "./mint/dexy";
 
 // TODO: Tested on chain but need to add unit test for this scenario
-class Extract {
-    private readonly minBankNanoErgs = 10000000000n
+class Extract extends Dexy {
+  private readonly minBankNanoErgs = 1000000000000n;
+  protected tracking95In: Box<bigint>;
+  protected tracking101In: Box<bigint>;
+  protected extractIn: Box<bigint>;
+  protected bankIn: Box<bigint>;
+  protected userBoxes: Box<bigint>[];
+  protected user_address: ErgoAddress;
+  protected HEIGHT: number;
 
-    createExtractTransaction(tx_fee: number, lpIn: ErgoBox, extractIn: ErgoBox, oracleBox: ErgoBox, tracking95Box: ErgoBox, tracking101Box: ErgoBox, bankBox: ErgoBox, userBoxes: ErgoBoxes, user_address: Address, HEIGHT: number): DexyUnsignedTX {
-        const inputs = RustModule.SigmaRust.ErgoBoxes.empty()
-        let RELEASE = false
-        if (!this.validBankBox(bankBox)) {
-            RELEASE = true
-        }
-        inputs.add(lpIn)
-        inputs.add(extractIn)
-        let userFund = 0n
-        for (let i = 0; i < userBoxes.len(); i++) {
-            inputs.add(userBoxes.get(i));
-            userFund += BigInt(userBoxes.get(i).value().as_i64().to_str())
-        }
-        if (userFund < tx_fee)
-            throw new Error("user fund is not enough")
-        const target_tokens = new RustModule.SigmaRust.Tokens()
-        const outputs = RustModule.SigmaRust.ErgoBoxCandidates.empty();
-        const lpOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
-            RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(lpIn.value().as_i64().to_str())).toString())),
-            RustModule.SigmaRust.Contract.new(lpIn.ergo_tree()),
-            HEIGHT
-        )
-        for (let i = 0; i < 2; i++) {
-            lpOut.add_token(lpIn.tokens().get(i).id(), lpIn.tokens().get(i).amount())
-            target_tokens.add(new RustModule.SigmaRust.Token(lpIn.tokens().get(i).id(), lpIn.tokens().get(i).amount()))
-        }
-        const oracleRateXY = BigInt(oracleBox.register_value(4).to_i64().to_str()) / 1000000n
-        const lpReservesXOut = BigInt(lpIn.value().as_i64().to_str())
-        let deltaDexy = BigInt(lpIn.tokens().get(2).amount().as_i64().to_str())
-        if (RELEASE) {
-            deltaDexy -= (lpReservesXOut * 100n) / (oracleRateXY * 101n)
-            lpOut.add_token(lpIn.tokens().get(2).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str(((lpReservesXOut * 100n) / (oracleRateXY * 101n)).toString())))
-            target_tokens.add(new RustModule.SigmaRust.Token(lpIn.tokens().get(2).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str(((lpReservesXOut * 100n) / (oracleRateXY * 101n)).toString()))))
-        } else {
-            deltaDexy -= (lpReservesXOut * 100n) / (oracleRateXY * 97n)
-            lpOut.add_token(lpIn.tokens().get(2).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str(((lpReservesXOut * 100n) / (oracleRateXY * 97n)).toString())))
-            target_tokens.add(new RustModule.SigmaRust.Token(lpIn.tokens().get(2).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str(((lpReservesXOut * 100n) / (oracleRateXY * 97n)).toString()))))
-        }
-        const lpOutBuild = lpOut.build()
-        outputs.add(lpOutBuild)
-        const extractOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
-            RustModule.SigmaRust.BoxValue.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(extractIn.value().as_i64().to_str())).toString())),
-            RustModule.SigmaRust.Contract.new(extractIn.ergo_tree()),
-            HEIGHT
-        )
-        extractOut.add_token(extractIn.tokens().get(0).id(), extractIn.tokens().get(0).amount())
-        extractOut.add_token(extractIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(extractIn.tokens().get(1).amount().as_i64().to_str()) + deltaDexy).toString())))
-        target_tokens.add(new RustModule.SigmaRust.Token(extractIn.tokens().get(0).id(), extractIn.tokens().get(0).amount()))
-        target_tokens.add(new RustModule.SigmaRust.Token(extractIn.tokens().get(1).id(), RustModule.SigmaRust.TokenAmount.from_i64(RustModule.SigmaRust.I64.from_str((BigInt(extractIn.tokens().get(1).amount().as_i64().to_str()) + deltaDexy).toString()))))
-        const extractOutBuild = extractOut.build()
-        outputs.add(extractOutBuild)
+  constructor(
+    oracleBox: Box<Amount>,
+    lpBox: Box<Amount>,
+    extractInBox: Box<Amount>,
+    tracking95InBox: Box<Amount>,
+    tracking101InBox: Box<Amount>,
+    bankBox: Box<Amount>,
+    userInBoxes: Box<Amount>[],
+    user_address: ErgoAddress,
+    HEIGHT: number,
+  ) {
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+    this.extractIn = ensureUTxOBigInt(extractInBox);
+    this.tracking95In = ensureUTxOBigInt(tracking95InBox);
+    this.tracking101In = ensureUTxOBigInt(tracking101InBox);
+    this.bankIn = ensureUTxOBigInt(bankBox);
+    this.tracking95In = ensureUTxOBigInt(tracking95InBox);
+    this.userBoxes = userInBoxes.map((userBox) => ensureUTxOBigInt(userBox));
+    this.user_address = user_address;
+    this.HEIGHT = HEIGHT;
+  }
 
-        if (!this.validBankBox(bankBox))
-            throw new Error("Bank box is not valid")
-        else if (!this.validExtract(lpIn, lpOutBuild, oracleBox, bankBox, extractIn, extractOutBuild) && !this.validRelease(lpIn, lpOutBuild, oracleBox, bankBox))
-            throw new Error("Extract and Release is not valid")
-        else if (!this.validLpBox(lpIn, lpOutBuild, extractIn, extractOutBuild))
-            throw new Error("Lp box is not valid")
-
-        const target_output_selector = new RustModule.SigmaRust.SimpleBoxSelector()
-        const target_outputs = target_output_selector.select(
-            inputs,
-            RustModule.SigmaRust.BoxValue.from_i64(
-                RustModule.SigmaRust.I64.from_str((
-                    BigInt(tx_fee) +
-                    BigInt(outputs.get(0).value().as_i64().as_num()) +
-                    BigInt(outputs.get(1).value().as_i64().as_num())
-                ).toString())),
-            target_tokens)
-        const tx_builder = RustModule.SigmaRust.TxBuilder.new(
-            new RustModule.SigmaRust.BoxSelection(inputs, target_outputs.change()),
-            outputs,
-            HEIGHT,
-            RustModule.SigmaRust.BoxValue.from_i64(
-                RustModule.SigmaRust.I64.from_str(tx_fee.toString())
-            ),
-            RustModule.SigmaRust.Address.recreate_from_ergo_tree(user_address.to_ergo_tree())
-        )
-        const data_inputs = new RustModule.SigmaRust.DataInputs();
-        const data_inputs_ergoBoxes = RustModule.SigmaRust.ErgoBoxes.empty()
-        data_inputs.add(new RustModule.SigmaRust.DataInput(oracleBox.box_id()));
-        data_inputs_ergoBoxes.add(oracleBox)
-        if (RELEASE) {
-            data_inputs.add(new RustModule.SigmaRust.DataInput(tracking101Box.box_id()));
-            data_inputs_ergoBoxes.add(tracking101Box)
-        } else {
-            data_inputs.add(new RustModule.SigmaRust.DataInput(tracking95Box.box_id()));
-            data_inputs.add(new RustModule.SigmaRust.DataInput(bankBox.box_id()));
-            data_inputs_ergoBoxes.add(tracking95Box)
-            data_inputs_ergoBoxes.add(bankBox)
-        }
-
-        tx_builder.set_data_inputs(data_inputs);
-
-
-        return {
-            tx: tx_builder.build(),
-            dataInputs: data_inputs_ergoBoxes,
-            inputs: inputs
-        }
+  createExtractTransaction(tx_fee: number): ErgoUnsignedTransaction {
+    let RELEASE = false;
+    if (!this.validBankBox(this.bankIn)) {
+      RELEASE = true;
     }
+    const inputs = new InputsCollection([
+      this.lpBox,
+      this.extractIn,
+      ...this.userBoxes,
+    ]);
+    const outputs = new OutputsCollection();
+    const userFund = this.userBoxes.reduce((a, b) => {
+      return a + b.value;
+    }, 0n);
+    if (userFund < tx_fee) throw new Error("user fund is not enough");
 
-
-    deltaDexy(extractIn: ErgoBox, extractOut: ErgoBoxCandidate) {
-        return BigInt(extractOut.tokens().get(1).amount().as_i64().to_str()) - BigInt(extractIn.tokens().get(1).amount().as_i64().to_str())
+    const lpOut = new OutputBuilder(
+      this.lpReservesX(),
+      this.lpBox.ergoTree,
+      this.HEIGHT,
+    );
+    lpOut.addTokens(this.lpBox.assets.slice(0, 2));
+    const oracleRateXY = this.oracleRate();
+    const lpReservesXOut = this.lpReservesX();
+    let deltaDexy = this.lpReservesY();
+    if (RELEASE) {
+      deltaDexy -= (lpReservesXOut * 100n) / (oracleRateXY * 101n);
+      lpOut.addTokens({
+        tokenId: this.lpBox.assets.at(2).tokenId,
+        amount: (lpReservesXOut * 100n) / (oracleRateXY * 101n),
+      });
+    } else {
+      deltaDexy -= (lpReservesXOut * 100n) / (oracleRateXY * 97n);
+      lpOut.addTokens({
+        tokenId: this.lpBox.assets.at(2).tokenId,
+        amount: (lpReservesXOut * 100n) / (oracleRateXY * 97n),
+      });
     }
+    const lpOutBuild = lpOut.build();
+    outputs.add(lpOut);
 
-    lpReservesXOut(lpBoxOut: ErgoBoxCandidate) {
-        return BigInt(lpBoxOut.value().as_i64().to_str())
-    }
+    const extractOut = new OutputBuilder(
+      this.extractIn.value,
+      this.extractIn.ergoTree,
+      this.HEIGHT,
+    );
+    extractOut.addTokens(this.extractIn.assets.at(0));
+    extractOut.addTokens({
+      tokenId: this.extractIn.assets.at(1).tokenId,
+      amount: this.extractIn.assets.at(1).amount + deltaDexy,
+    });
+    const extractOutBuild = extractOut.build();
+    outputs.add(extractOut);
 
-    lpReservesXIn(lpBoxIn: ErgoBox) {
-        return BigInt(lpBoxIn.value().as_i64().to_str())
-    }
+    if (
+      !this.validExtract(lpOutBuild, this.bankIn, extractOutBuild) &&
+      !this.validRelease(extractOutBuild, lpOutBuild)
+    )
+      throw new Error("Extract and Release is not valid");
+    else if (!this.validLpBox(lpOutBuild, extractOutBuild))
+      throw new Error("Lp box is not valid");
 
-    lpReservesYIn(lpBoxIn: ErgoBox) {
-        return BigInt(lpBoxIn.tokens().get(2).amount().as_i64().to_str())
-    }
+    const tx_builder = new TransactionBuilder(this.HEIGHT)
+      .from(inputs)
+      .to(outputs.toArray())
+      .sendChangeTo(this.user_address)
+      .payFee(tx_fee.toString());
 
-    lpReservesYOut(lpBoxOut: ErgoBoxCandidate) {
-        return BigInt(lpBoxOut.tokens().get(2).amount().as_i64().to_str())
+    if (RELEASE) {
+      tx_builder.withDataFrom([this.oracleBox, this.tracking101In]);
+    } else {
+      tx_builder.withDataFrom([this.oracleBox, this.tracking95In, this.bankIn]);
     }
+    return tx_builder.build();
+  }
 
-    lpRateXYOut(lpBoxOut: ErgoBoxCandidate) {
-        return this.lpReservesXOut(lpBoxOut) / this.lpReservesYOut(lpBoxOut)
-    }
+  deltaDexy(extractOut: BoxCandidate<bigint>) {
+    return extractOut.assets.at(1).amount - this.extractIn.assets.at(1).amount;
+  }
 
-    oracleRateXy(oracleBox: ErgoBox) {
-        return BigInt(oracleBox.register_value(4).to_i64().to_str()) / 1000000n
-    }
+  lpReservesXOut(lpBoxOut: BoxCandidate<bigint>) {
+    return lpBoxOut.value;
+  }
 
-    validExtractAmount(oracleBox: ErgoBox, lpBoxOut: ErgoBoxCandidate) {
-        return this.oracleRateXy(oracleBox) * 97n < this.lpRateXYOut(lpBoxOut) * 100n && this.oracleRateXy(oracleBox) * 98n > this.lpRateXYOut(lpBoxOut) * 100n
-    }
+  lpReservesYOut(lpBoxOut: BoxCandidate<bigint>) {
+    return lpBoxOut.assets.at(2).amount;
+  }
 
-    validReleaseAmount(oracleBox: ErgoBox, lpBoxOut: ErgoBoxCandidate) {
-        return this.oracleRateXy(oracleBox) * 101n > this.lpRateXYOut(lpBoxOut) * 100n
-    }
+  lpRateXYOut(lpBoxOut: BoxCandidate<bigint>) {
+    return this.lpReservesXOut(lpBoxOut) / this.lpReservesYOut(lpBoxOut);
+  }
 
-    validExtract(lpBoxIn: ErgoBox, lpBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox, bankBox: ErgoBox, extractIn: ErgoBox, extractOut: ErgoBoxCandidate) {
-        return this.deltaDexy(extractIn, extractOut) > 0n && this.validExtractAmount(oracleBox, lpBoxOut) && this.validBankBox(bankBox)
-    }
+  validExtractAmount(lpBoxOut: BoxCandidate<bigint>) {
+    return (
+      this.oracleRate() * 97n < this.lpRateXYOut(lpBoxOut) * 100n &&
+      this.oracleRate() * 98n > this.lpRateXYOut(lpBoxOut) * 100n
+    );
+  }
 
-    validRelease(lpBoxIn: ErgoBox, lpBoxOut: ErgoBoxCandidate, oracleBox: ErgoBox, bankBox: ErgoBox) {
-        return this.deltaDexy(lpBoxIn, lpBoxOut) < 0n && this.validReleaseAmount(oracleBox, lpBoxOut)
-    }
+  validReleaseAmount(lpBoxOut: BoxCandidate<bigint>) {
+    return this.oracleRate() * 101n > this.lpRateXYOut(lpBoxOut) * 100n;
+  }
 
-    validBankBox(bankBox: ErgoBox) {
-        return BigInt(bankBox.value().as_i64().to_str()) <= this.minBankNanoErgs
-    }
+  validExtract(
+    lpBoxOut: BoxCandidate<bigint>,
+    bankBox: Box<bigint>,
+    extractOut: BoxCandidate<bigint>,
+  ) {
+    return (
+      this.deltaDexy(extractOut) > 0n &&
+      this.validExtractAmount(lpBoxOut) &&
+      this.validBankBox(bankBox)
+    );
+  }
 
-    validLpBox(lpBox: ErgoBox, lpBoxOut: ErgoBoxCandidate, extractIn: ErgoBox, extractOut: ErgoBoxCandidate) {
-        return this.lpReservesYOut(lpBoxOut) === this.lpReservesYIn(lpBox) - this.deltaDexy(extractIn, extractOut) && this.lpReservesXOut(lpBoxOut) === this.lpReservesXIn(lpBox)
-    }
+  validRelease(
+    extractOut: BoxCandidate<bigint>,
+    lpBoxOut: BoxCandidate<bigint>,
+  ) {
+    return this.deltaDexy(extractOut) < 0n && this.validReleaseAmount(lpBoxOut);
+  }
+
+  validBankBox(bankBox: Box<bigint>) {
+    return bankBox.value <= this.minBankNanoErgs;
+  }
+
+  validLpBox(lpBoxOut: BoxCandidate<bigint>, extractOut: BoxCandidate<bigint>) {
+    return (
+      this.lpReservesYOut(lpBoxOut) ===
+        this.lpReservesY() - this.deltaDexy(extractOut) &&
+      this.lpReservesXOut(lpBoxOut) === this.lpReservesX()
+    );
+  }
 }
 
-export { Extract }
+export { Extract };

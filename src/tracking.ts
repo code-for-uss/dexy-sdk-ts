@@ -1,142 +1,137 @@
-import { RustModule } from "@ergolabs/ergo-sdk";
+import { Amount, Box, BoxCandidate, ensureUTxOBigInt } from "@fleet-sdk/common";
 import {
-    Address,
-    ErgoBox,
-    ErgoBoxes,
-    ErgoBoxCandidate
-} from "ergo-lib-wasm-browser";
-import { DexyUnsignedTX } from "./models/types";
+  ErgoAddress,
+  ErgoUnsignedTransaction,
+  InputsCollection,
+  OutputBuilder,
+  OutputsCollection,
+  TransactionBuilder,
+} from "@fleet-sdk/core";
+import { SConstant } from "@fleet-sdk/serializer";
+import { Dexy } from "./mint/dexy";
+import { SInt } from "@fleet-sdk/serializer";
 
 // TODO: should be test
-class Tracking {
-    private readonly threshold = 3
-    private readonly maxInt = 2147483647
+class Tracking extends Dexy {
+  private readonly threshold = 3;
+  private readonly maxInt = 2147483647;
+  protected trackingIn: Box<bigint>;
+  protected userBoxes: Box<bigint>[];
+  protected user_address: ErgoAddress;
+  protected HEIGHT: number;
 
+  constructor(
+    oracleBox: Box<Amount>,
+    lpBox: Box<Amount>,
+    trackingInBox: Box<Amount>,
+    userInBoxes: Box<Amount>[],
+    user_address: ErgoAddress,
+    HEIGHT: number,
+  ) {
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+    this.trackingIn = ensureUTxOBigInt(trackingInBox);
+    this.userBoxes = userInBoxes.map((userBox) => ensureUTxOBigInt(userBox));
+    this.user_address = user_address;
+    this.HEIGHT = HEIGHT;
+  }
 
-    createTrackingTransaction(tx_fee: number, lpIn: ErgoBox, oracleBox: ErgoBox, trackingBox: ErgoBox, userBoxes: ErgoBoxes, user_address: Address, HEIGHT: number): DexyUnsignedTX {
-        const inputs = RustModule.SigmaRust.ErgoBoxes.empty()
-        inputs.add(trackingBox)
-        let userFund = 0n
-        for (let i = 0; i < userBoxes.len(); i++) {
-            inputs.add(userBoxes.get(i));
-            userFund += BigInt(userBoxes.get(i).value().as_i64().to_str())
-        }
-        const target_tokens = new RustModule.SigmaRust.Tokens()
-        const outputs = RustModule.SigmaRust.ErgoBoxCandidates.empty();
-        const trackingBoxOut = new RustModule.SigmaRust.ErgoBoxCandidateBuilder(
-            trackingBox.value(),
-            RustModule.SigmaRust.Contract.new(trackingBox.ergo_tree()),
-            HEIGHT
-        )
-        trackingBoxOut.add_token(trackingBox.tokens().get(0).id(), trackingBox.tokens().get(0).amount())
-        target_tokens.add(new RustModule.SigmaRust.Token(trackingBox.tokens().get(0).id(), trackingBox.tokens().get(0).amount()))
-        trackingBoxOut.set_register_value(4, trackingBox.register_value(4))
-        trackingBoxOut.set_register_value(5, trackingBox.register_value(5))
-        trackingBoxOut.set_register_value(6, trackingBox.register_value(6))
-        if (trackingBox.register_value(7).to_js() === this.maxInt) {
-            trackingBoxOut.set_register_value(7, RustModule.SigmaRust.Constant.from_js(HEIGHT))
-        } else {
-            trackingBoxOut.set_register_value(7, RustModule.SigmaRust.Constant.from_js(this.maxInt))
-        }
-        const trackingBoxOutBuild = trackingBoxOut.build()
-        outputs.add(trackingBoxOutBuild)
-        if (!this.correctAction(trackingBox, trackingBoxOutBuild, lpIn, oracleBox, HEIGHT))
-            throw new Error("Invalid action")
-        else if (this.numOut(trackingBoxOutBuild) !== this.numIn(trackingBox))
-            throw new Error("Invalid numOut")
-        else if (this.denomOut(trackingBoxOutBuild) !== this.denomIn(trackingBox))
-            throw new Error("Invalid denomOut")
-        else if (this.isBelowOut(trackingBoxOutBuild) !== this.isBelowIn(trackingBox))
-            throw new Error("Invalid isBelowOut")
+  createTrackingTransaction(tx_fee: number): ErgoUnsignedTransaction {
+    const inputs = new InputsCollection([this.trackingIn, ...this.userBoxes]);
+    const outputs = new OutputsCollection();
+    const userFund = this.userBoxes.reduce((a, b) => {
+      return a + b.value;
+    }, 0n);
+    if (userFund < tx_fee) throw new Error("user fund is not enough");
 
-        const target_output_selector = new RustModule.SigmaRust.SimpleBoxSelector()
-        const target_outputs = target_output_selector.select(
-            inputs,
-            RustModule.SigmaRust.BoxValue.from_i64(
-                RustModule.SigmaRust.I64.from_str((
-                    BigInt(tx_fee) +
-                    BigInt(outputs.get(0).value().as_i64().as_num())
-                ).toString())),
-            target_tokens)
-        const tx_builder = RustModule.SigmaRust.TxBuilder.new(
-            new RustModule.SigmaRust.BoxSelection(inputs, target_outputs.change()),
-            outputs,
-            HEIGHT,
-            RustModule.SigmaRust.BoxValue.from_i64(
-                RustModule.SigmaRust.I64.from_str(tx_fee.toString())
-            ),
-            RustModule.SigmaRust.Address.recreate_from_ergo_tree(user_address.to_ergo_tree())
-        )
-        const data_inputs = new RustModule.SigmaRust.DataInputs();
-        data_inputs.add(new RustModule.SigmaRust.DataInput(oracleBox.box_id()));
-        data_inputs.add(new RustModule.SigmaRust.DataInput(lpIn.box_id()));
-        tx_builder.set_data_inputs(data_inputs);
+    const trackingBoxOut = new OutputBuilder(
+      this.trackingIn.value,
+      this.trackingIn.ergoTree,
+      this.HEIGHT,
+    );
+    trackingBoxOut.addTokens(this.trackingIn.assets.at(0));
+    // TODO: check possibility of use registers directly or need to parse and use it again
+    trackingBoxOut.setAdditionalRegisters({
+      R4: this.trackingIn.additionalRegisters.R4,
+      R5: this.trackingIn.additionalRegisters.R5,
+      R6: this.trackingIn.additionalRegisters.R6,
+      R7:
+        SConstant.from<number>(this.trackingIn.additionalRegisters.R7).data ===
+        this.maxInt
+          ? SInt(this.HEIGHT)
+          : SInt(this.maxInt),
+    });
+    const trackingBoxOutBuild = trackingBoxOut.build();
+    outputs.add(trackingBoxOut);
 
-        const data_inputs_ergoBoxes = RustModule.SigmaRust.ErgoBoxes.empty()
-        data_inputs_ergoBoxes.add(oracleBox)
-        data_inputs_ergoBoxes.add(lpIn)
+    if (!this.correctAction(trackingBoxOutBuild, this.HEIGHT))
+      throw new Error("Invalid action");
+    else if (this.numOut(trackingBoxOutBuild) !== this.numIn())
+      throw new Error("Invalid numOut");
+    else if (this.denomOut(trackingBoxOutBuild) !== this.denomIn())
+      throw new Error("Invalid denomOut");
+    else if (this.isBelowOut(trackingBoxOutBuild) !== this.isBelowIn())
+      throw new Error("Invalid isBelowOut");
 
+    return new TransactionBuilder(this.HEIGHT)
+      .from(inputs)
+      .to(outputs.toArray())
+      .sendChangeTo(this.user_address)
+      .withDataFrom([this.oracleBox, this.lpBox])
+      .payFee(tx_fee.toString())
+      .build();
+  }
 
-        return {
-            tx: tx_builder.build(),
-            dataInputs: data_inputs_ergoBoxes,
-            inputs: inputs
-        }
-    }
+  numOut(trackingOut: BoxCandidate<bigint>) {
+    return SConstant.from<bigint>(trackingOut.additionalRegisters.R4).data;
+  }
 
-    numOut(trackingOut: ErgoBoxCandidate) {
-        return trackingOut.register_value(4).to_js()
-    }
+  numIn() {
+    return SConstant.from<bigint>(this.trackingIn.additionalRegisters.R4).data;
+  }
 
-    numIn(trackingIn: ErgoBox) {
-        return trackingIn.register_value(4).to_js()
-    }
+  denomOut(trackingOut: BoxCandidate<bigint>) {
+    return SConstant.from<bigint>(trackingOut.additionalRegisters.R5).data;
+  }
 
-    denomOut(trackingOut: ErgoBoxCandidate) {
-        return trackingOut.register_value(5).to_js()
-    }
+  denomIn() {
+    return SConstant.from<bigint>(this.trackingIn.additionalRegisters.R5).data;
+  }
 
-    denomIn(trackingIn: ErgoBox) {
-        return trackingIn.register_value(5).to_js()
-    }
+  isBelowOut(trackingOut: BoxCandidate<bigint>): boolean {
+    return SConstant.from<boolean>(trackingOut.additionalRegisters.R6).data;
+  }
 
-    isBelowOut(trackingOut: ErgoBoxCandidate) {
-        return trackingOut.register_value(6).to_js()
-    }
+  isBelowIn(): boolean {
+    return SConstant.from<boolean>(this.trackingIn.additionalRegisters.R6).data;
+  }
 
-    isBelowIn(trackingIn: ErgoBox) {
-        return trackingIn.register_value(6).to_js()
-    }
+  correctAction(trackingOut: BoxCandidate<bigint>, HEIGHT: number) {
+    const x = this.lpRate() * this.denomIn();
+    const y = this.numIn() * this.oracleRate();
+    const trackingHeightIn = SConstant.from<number>(
+      this.trackingIn.additionalRegisters.R7,
+    ).data;
+    const trackingHeightOut = SConstant.from<number>(
+      trackingOut.additionalRegisters.R7,
+    ).data;
+    const notTriggeredEarlier = trackingHeightIn === this.maxInt;
+    const triggeredNow =
+      trackingHeightOut >= HEIGHT - this.threshold &&
+      trackingHeightOut <= HEIGHT;
 
-    reservesX(lpBox: ErgoBox) {
-        return BigInt(lpBox.value().as_i64().to_str())
-    }
+    const notResetEarlier = trackingHeightIn < this.maxInt;
+    const resetNow = trackingHeightOut === this.maxInt;
 
-    reservesY(lpBox: ErgoBox) {
-        return BigInt(lpBox.tokens().get(2).amount().as_i64().to_str())
-    }
-
-    lpRateXY(lpBox: ErgoBox) {
-        return this.reservesX(lpBox) / this.reservesY(lpBox)
-    }
-
-    oracleRateXY(oracleBox: ErgoBox) {
-        return BigInt(oracleBox.register_value(4).to_i64().to_str()) / 1000000n
-    }
-
-    correctAction(trackingIn: ErgoBox, trackingOut: ErgoBoxCandidate, lpBox: ErgoBox, oracleBox: ErgoBox, HEIGHT: number) {
-        const x = this.lpRateXY(lpBox) * this.denomIn(trackingIn)
-        const y = this.numIn(trackingIn) * this.oracleRateXY(oracleBox)
-        const notTriggeredEarlier = trackingIn.register_value(7).to_js() === this.maxInt
-        const triggeredNow = trackingOut.register_value(7).to_js() >= HEIGHT - this.threshold && trackingOut.register_value(7).to_js() <= HEIGHT
-
-        const notResetEarlier = trackingIn.register_value(7).to_js() < this.maxInt
-        const resetNow = trackingOut.register_value(7).to_js() === this.maxInt
-
-        const trigger = ((this.isBelowIn(trackingIn) && x < y) || (!this.isBelowIn(trackingIn) && x > y)) && notTriggeredEarlier && triggeredNow
-        const reset = ((this.isBelowIn(trackingIn) && x >= y) || (!this.isBelowIn(trackingIn) && x <= y)) && notResetEarlier && resetNow
-        return trigger || reset
-    }
+    const trigger =
+      ((this.isBelowIn() && x < y) || (!this.isBelowIn() && x > y)) &&
+      notTriggeredEarlier &&
+      triggeredNow;
+    const reset =
+      ((this.isBelowIn() && x >= y) || (!this.isBelowIn() && x <= y)) &&
+      notResetEarlier &&
+      resetNow;
+    return trigger || reset;
+  }
 }
 
-export { Tracking }
+export { Tracking };

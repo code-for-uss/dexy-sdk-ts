@@ -14,6 +14,7 @@ import { Dexy } from "./mint/dexy";
 class Intervention extends Dexy {
   private readonly T_int = 20;
   private readonly interventionThresholdPercent = 98n;
+  private readonly T = 360 // from paper, gap between two interventions
   protected bankIn: Box<bigint>;
   protected interventionIn: Box<bigint>;
   protected tracking98In: Box<bigint>;
@@ -89,6 +90,7 @@ class Intervention extends Dexy {
     interventionOut.addTokens(this.interventionIn.assets);
     outputs.add(interventionOut);
 
+    if (this.validGap()) throw new Error("Gap condition is false");
     if (!this.validThreshold()) throw new Error("Threshold is not valid");
     else if (!this.validTracking(this.tracking98In, this.HEIGHT))
       throw new Error("Tracking is not valid");
@@ -134,6 +136,12 @@ class Intervention extends Dexy {
     return (
       this.lpReservesX() * 100n <
       this.oracleRate() * this.interventionThresholdPercent * this.lpReservesY()
+    );
+  }
+
+  validGap() {
+    return (
+        this.interventionIn.creationHeight < this.HEIGHT - this.T
     );
   }
 

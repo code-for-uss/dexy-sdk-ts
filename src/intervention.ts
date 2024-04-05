@@ -90,7 +90,7 @@ class Intervention extends Dexy {
     interventionOut.addTokens(this.interventionIn.assets);
     outputs.add(interventionOut);
 
-    if (this.validGap()) throw new Error("Gap condition is false");
+    if (!this.validGap()) throw new Error("Gap condition is false");
     if (!this.validThreshold()) throw new Error("Threshold is not valid");
     else if (!this.validTracking(this.tracking98In, this.HEIGHT))
       throw new Error("Tracking is not valid");

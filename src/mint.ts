@@ -1,8 +1,7 @@
 import { Dexy } from "./mint/dexy";
 import { FreeMint } from "./mint/freeMint";
 import { ArbitrageMint } from "./mint/arbitrageMint";
-import { Amount, Box } from "@fleet-sdk/common";
-import { ensureUTxOBigInt } from "@fleet-sdk/common/dist";
+import { Amount, Box, ensureUTxOBigInt } from "@fleet-sdk/common";
 
 class Mint extends Dexy {
   private MintType = {

@@ -1,6 +1,6 @@
 {
   "name": "dexy-sdk-ts",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "a ts sdk for dexy protocol",
   "main": "dist/index.js",
   "type": "module",

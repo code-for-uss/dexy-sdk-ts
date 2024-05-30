@@ -4,10 +4,10 @@ import {
   ErgoUnsignedTransaction,
   InputsCollection,
   OutputBuilder,
-  OutputsCollection,
+  OutputsCollection, SBool,
   TransactionBuilder,
 } from "@fleet-sdk/core";
-import { SConstant } from "@fleet-sdk/serializer";
+import { parse, SConstant } from "@fleet-sdk/serializer";
 import { Dexy } from "./mint/dexy";
 import { SInt } from "@fleet-sdk/serializer";
 
@@ -51,9 +51,9 @@ class Tracking extends Dexy {
     trackingBoxOut.addTokens(this.trackingIn.assets.at(0));
     // TODO: check possibility of use registers directly or need to parse and use it again
     trackingBoxOut.setAdditionalRegisters({
-      R4: this.trackingIn.additionalRegisters.R4,
-      R5: this.trackingIn.additionalRegisters.R5,
-      R6: this.trackingIn.additionalRegisters.R6,
+      R4: SInt(this.numIn()),
+      R5: SInt(this.denomIn()),
+      R6: SBool(this.isBelowIn()),
       R7:
         SConstant.from<number>(this.trackingIn.additionalRegisters.R7).data ===
         this.maxInt
@@ -82,19 +82,19 @@ class Tracking extends Dexy {
   }
 
   numOut(trackingOut: BoxCandidate<bigint>) {
-    return SConstant.from<bigint>(trackingOut.additionalRegisters.R4).data;
+    return SConstant.from<number>(trackingOut.additionalRegisters.R4).data;
   }
 
   numIn() {
-    return SConstant.from<bigint>(this.trackingIn.additionalRegisters.R4).data;
+    return SConstant.from<number>(this.trackingIn.additionalRegisters.R4).data;
   }
 
   denomOut(trackingOut: BoxCandidate<bigint>) {
-    return SConstant.from<bigint>(trackingOut.additionalRegisters.R5).data;
+    return SConstant.from<number>(trackingOut.additionalRegisters.R5).data;
   }
 
-  denomIn() {
-    return SConstant.from<bigint>(this.trackingIn.additionalRegisters.R5).data;
+  denomIn()  {
+    return parse<number>(this.trackingIn.additionalRegisters.R5);
   }
 
   isBelowOut(trackingOut: BoxCandidate<bigint>): boolean {
@@ -106,8 +106,8 @@ class Tracking extends Dexy {
   }
 
   correctAction(trackingOut: BoxCandidate<bigint>, HEIGHT: number) {
-    const x = this.lpRate() * this.denomIn();
-    const y = this.numIn() * this.oracleRate();
+    const x = this.lpRate() * BigInt(this.denomIn());
+    const y = BigInt(this.numIn()) * this.oracleRate();
     const trackingHeightIn = SConstant.from<number>(
       this.trackingIn.additionalRegisters.R7,
     ).data;

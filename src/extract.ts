@@ -8,10 +8,13 @@ import {
   TransactionBuilder,
 } from "@fleet-sdk/core";
 import { Dexy } from "./mint/dexy";
+import { SConstant } from "@fleet-sdk/serializer";
 
 // TODO: Tested on chain but need to add unit test for this scenario
 class Extract extends Dexy {
   private readonly minBankNanoErgs = 1000000000000n;
+  private readonly T_extract = 720
+  private readonly T_release = 2 // blocks for which the rate is above 101%
   protected tracking95In: Box<bigint>;
   protected tracking101In: Box<bigint>;
   protected extractIn: Box<bigint>;
@@ -153,7 +156,8 @@ class Extract extends Dexy {
     return (
       this.deltaDexy(extractOut) > 0n &&
       this.validExtractAmount(lpBoxOut) &&
-      this.validBankBox(bankBox)
+      this.validBankBox(bankBox) &&
+      this.validExtractHeight()
     );
   }
 
@@ -161,7 +165,25 @@ class Extract extends Dexy {
     extractOut: BoxCandidate<bigint>,
     lpBoxOut: BoxCandidate<bigint>,
   ) {
-    return this.deltaDexy(extractOut) < 0n && this.validReleaseAmount(lpBoxOut);
+    return (
+        this.deltaDexy(extractOut) < 0n &&
+        this.validReleaseAmount(lpBoxOut) &&
+        this.validReleaseHeight()
+    )
+  }
+
+  validReleaseHeight() {
+    const trackingHeightIn = SConstant.from<number>(
+        this.tracking101In.additionalRegisters.R7,
+    ).data;
+    return this.HEIGHT - trackingHeightIn > this.T_release
+  }
+
+  validExtractHeight() {
+    const trackingHeightIn = SConstant.from<number>(
+        this.tracking95In.additionalRegisters.R7,
+    ).data;
+    return this.HEIGHT - trackingHeightIn > this.T_extract
   }
 
   validBankBox(bankBox: Box<bigint>) {

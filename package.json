@@ -1,6 +1,6 @@
 {
   "name": "dexy-sdk-ts",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "a ts sdk for dexy protocol",
   "main": "dist/index.js",
   "type": "module",
@@ -26,9 +26,10 @@
   "homepage": "https://github.com/code-for-uss/dexy-sdk-ts#readme",
   "devDependencies": {
     "@types/jest": "^29.4.0",
+    "@types/node": "^18.17.19",
     "jest": "^29.4.3",
     "ts-jest": "^29.0.5",
-    "typescript": "^4.9.5",
+    "typescript": "^5.8.3",
     "@typescript-eslint/eslint-plugin": "^6.3.0",
     "@typescript-eslint/parser": "^6.3.0",
     "eslint": "^8.47.0",
@@ -38,9 +39,9 @@
     "prettier": "^3.0.1"
   },
   "dependencies": {
-    "@fleet-sdk/common": "^0.3.4",
-    "@fleet-sdk/core": "^0.3.4",
-    "@fleet-sdk/serializer": "^0.3.4",
-    "@fleet-sdk/wallet": "^0.3.4"
+    "@fleet-sdk/common": "^0.10.0",
+    "@fleet-sdk/core": "^0.10.0",
+    "@fleet-sdk/serializer": "^0.10.0",
+    "@fleet-sdk/wallet": "^0.10.0"
   }
 }

@@ -1,6 +1,6 @@
 import { Box } from "@fleet-sdk/common";
 import { ensureUTxOBigInt, BoxCandidate } from "@fleet-sdk/common";
-import { parse } from "@fleet-sdk/serializer";
+import { decode } from "@fleet-sdk/serializer";
 
 abstract class Dexy {
   protected oracleBox: Box<bigint>;
@@ -73,7 +73,7 @@ abstract class Dexy {
   }
 
   oracleRate() {
-    return parse<bigint>(this.oracleBox.additionalRegisters.R4) / 1000000n;
+    return decode<bigint>(this.oracleBox.additionalRegisters.R4).data / 1000000n;
   }
 
   lpRate() {

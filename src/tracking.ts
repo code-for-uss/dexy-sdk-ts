@@ -7,7 +7,7 @@ import {
   OutputsCollection, SBool,
   TransactionBuilder,
 } from "@fleet-sdk/core";
-import { parse, SConstant } from "@fleet-sdk/serializer";
+import { decode } from "@fleet-sdk/serializer";
 import { Dexy } from "./mint/dexy";
 import { SInt } from "@fleet-sdk/serializer";
 
@@ -55,7 +55,7 @@ class Tracking extends Dexy {
       R5: SInt(this.denomIn()),
       R6: SBool(this.isBelowIn()),
       R7:
-        SConstant.from<number>(this.trackingIn.additionalRegisters.R7).data ===
+        decode<number>(this.trackingIn.additionalRegisters.R7).data ===
         this.maxInt
           ? SInt(this.HEIGHT)
           : SInt(this.maxInt),
@@ -82,36 +82,36 @@ class Tracking extends Dexy {
   }
 
   numOut(trackingOut: BoxCandidate<bigint>) {
-    return SConstant.from<number>(trackingOut.additionalRegisters.R4).data;
+    return decode<number>(trackingOut.additionalRegisters.R4).data;
   }
 
   numIn() {
-    return SConstant.from<number>(this.trackingIn.additionalRegisters.R4).data;
+    return decode<number>(this.trackingIn.additionalRegisters.R4).data;
   }
 
   denomOut(trackingOut: BoxCandidate<bigint>) {
-    return SConstant.from<number>(trackingOut.additionalRegisters.R5).data;
+    return decode<number>(trackingOut.additionalRegisters.R5).data;
   }
 
   denomIn()  {
-    return parse<number>(this.trackingIn.additionalRegisters.R5);
+    return decode<number>(this.trackingIn.additionalRegisters.R5).data;
   }
 
   isBelowOut(trackingOut: BoxCandidate<bigint>): boolean {
-    return SConstant.from<boolean>(trackingOut.additionalRegisters.R6).data;
+    return decode<boolean>(trackingOut.additionalRegisters.R6).data;
   }
 
   isBelowIn(): boolean {
-    return SConstant.from<boolean>(this.trackingIn.additionalRegisters.R6).data;
+    return decode<boolean>(this.trackingIn.additionalRegisters.R6).data;
   }
 
   correctAction(trackingOut: BoxCandidate<bigint>, HEIGHT: number) {
     const x = this.lpRate() * BigInt(this.denomIn());
     const y = BigInt(this.numIn()) * this.oracleRate();
-    const trackingHeightIn = SConstant.from<number>(
+    const trackingHeightIn = decode<number>(
       this.trackingIn.additionalRegisters.R7,
     ).data;
-    const trackingHeightOut = SConstant.from<number>(
+    const trackingHeightOut = decode<number>(
       trackingOut.additionalRegisters.R7,
     ).data;
     const notTriggeredEarlier = trackingHeightIn === this.maxInt;

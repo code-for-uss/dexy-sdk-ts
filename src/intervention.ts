@@ -9,6 +9,7 @@ import {
 } from "@fleet-sdk/core";
 import { SConstant } from "@fleet-sdk/serializer";
 import { Dexy } from "./mint/dexy";
+import { DexySDKError } from "./errors";
 
 // TODO: Tested on chain but need to add unit test for this scenario
 class Intervention extends Dexy {
@@ -24,6 +25,7 @@ class Intervention extends Dexy {
 
   constructor(
     oracleBox: Box<Amount>,
+    oracleRateDivisor: bigint,
     lpBox: Box<Amount>,
     bankInBox: Box<Amount>,
     interventionInBox: Box<Amount>,
@@ -32,7 +34,7 @@ class Intervention extends Dexy {
     user_address: ErgoAddress,
     HEIGHT: number,
   ) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
     this.bankIn = ensureUTxOBigInt(bankInBox);
     this.interventionIn = ensureUTxOBigInt(interventionInBox);
     this.tracking98In = ensureUTxOBigInt(tracking98InBox);
@@ -54,7 +56,7 @@ class Intervention extends Dexy {
     const userFund = this.userBoxes.reduce((a, b) => {
       return a + b.value;
     }, 0n);
-    if (userFund < tx_fee) throw new Error("user fund is not enough");
+    if (userFund < tx_fee) throw new DexySDKError("user fund is not enough");
 
     const lpOut = new OutputBuilder(
       this.lpReservesX() + erg_change,
@@ -90,14 +92,14 @@ class Intervention extends Dexy {
     interventionOut.addTokens(this.interventionIn.assets);
     outputs.add(interventionOut);
 
-    if (!this.validGap()) throw new Error("Gap condition is false");
-    if (!this.validThreshold()) throw new Error("Threshold is not valid");
+    if (!this.validGap()) throw new DexySDKError("Gap condition is false");
+    if (!this.validThreshold()) throw new DexySDKError("Threshold is not valid");
     else if (!this.validTracking(this.tracking98In, this.HEIGHT))
-      throw new Error("Tracking is not valid");
+      throw new DexySDKError("Tracking is not valid");
     else if (!this.validMaxSpending(lpOutBuild, this.bankIn, bankBoxOutBuild))
-      throw new Error("Max spending is not valid");
+      throw new DexySDKError("Max spending is not valid");
     else if (!this.validDeltas(lpOutBuild, this.bankIn, bankBoxOutBuild))
-      throw new Error("Deltas is not valid");
+      throw new DexySDKError("Deltas is not valid");
 
     return new TransactionBuilder(this.HEIGHT)
       .from(inputs)

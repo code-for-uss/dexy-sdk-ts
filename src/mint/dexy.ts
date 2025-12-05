@@ -3,16 +3,12 @@ import { ensureUTxOBigInt, BoxCandidate } from "@fleet-sdk/common";
 import { decode } from "@fleet-sdk/serializer";
 
 abstract class Dexy {
-  protected oracleBox: Box<bigint>;
-  protected lpBox: Box<bigint>;
   protected readonly thresholdPercent = 101n;
   private readonly buybackFeeNum = 2n;
   private readonly feeDenom = 1000n;
   private readonly bankFeeNum = 3n;
 
-  protected constructor(oracleBox: Box<bigint>, lpBox: Box<bigint>) {
-    this.oracleBox = oracleBox;
-    this.lpBox = lpBox;
+  protected constructor(protected oracleBox: Box<bigint>, protected lpBox: Box<bigint>, protected oracleRateDivisor: bigint) {
   }
 
   bankRate() {
@@ -73,7 +69,7 @@ abstract class Dexy {
   }
 
   oracleRate() {
-    return decode<bigint>(this.oracleBox.additionalRegisters.R4).data / 1000000n;
+    return decode<bigint>(this.oracleBox.additionalRegisters.R4).data / this.oracleRateDivisor;
   }
 
   lpRate() {

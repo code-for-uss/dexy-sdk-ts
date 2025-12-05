@@ -9,8 +9,8 @@ class Mint extends Dexy {
     arbMint: "arbMint",
   };
 
-  constructor(oracleBox: Box<Amount>, lpBox: Box<Amount>) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+  constructor(oracleBox: Box<Amount>, oracleRateDivisor: bigint, lpBox: Box<Amount>) {
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
   }
 
   mintType() {
@@ -22,9 +22,9 @@ class Mint extends Dexy {
   getMintObject() {
     const mintType = this.mintType();
     if (mintType == this.MintType.arbMint)
-      return new ArbitrageMint(this.oracleBox, this.lpBox);
+      return new ArbitrageMint(this.oracleBox, this.oracleRateDivisor, this.lpBox);
     else if (mintType == this.MintType.freeMint)
-      return new FreeMint(this.oracleBox, this.lpBox);
+      return new FreeMint(this.oracleBox, this.oracleRateDivisor, this.lpBox);
     else return undefined;
   }
 }

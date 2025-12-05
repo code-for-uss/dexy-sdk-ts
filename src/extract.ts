@@ -9,6 +9,7 @@ import {
 } from "@fleet-sdk/core";
 import { Dexy } from "./mint/dexy";
 import { SConstant } from "@fleet-sdk/serializer";
+import { DexySDKError } from "./errors";
 
 // TODO: Tested on chain but need to add unit test for this scenario
 class Extract extends Dexy {
@@ -25,6 +26,7 @@ class Extract extends Dexy {
 
   constructor(
     oracleBox: Box<Amount>,
+    oracleRateDivisor: bigint,
     lpBox: Box<Amount>,
     extractInBox: Box<Amount>,
     tracking95InBox: Box<Amount>,
@@ -34,7 +36,7 @@ class Extract extends Dexy {
     user_address: ErgoAddress,
     HEIGHT: number,
   ) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
     this.extractIn = ensureUTxOBigInt(extractInBox);
     this.tracking95In = ensureUTxOBigInt(tracking95InBox);
     this.tracking101In = ensureUTxOBigInt(tracking101InBox);
@@ -59,7 +61,7 @@ class Extract extends Dexy {
     const userFund = this.userBoxes.reduce((a, b) => {
       return a + b.value;
     }, 0n);
-    if (userFund < tx_fee) throw new Error("user fund is not enough");
+    if (userFund < tx_fee) throw new DexySDKError("user fund is not enough");
 
     const lpOut = new OutputBuilder(
       this.lpReservesX(),
@@ -103,9 +105,9 @@ class Extract extends Dexy {
       !this.validExtract(lpOutBuild, this.bankIn, extractOutBuild) &&
       !this.validRelease(extractOutBuild, lpOutBuild)
     )
-      throw new Error("Extract and Release is not valid");
+      throw new DexySDKError("Extract and Release is not valid");
     else if (!this.validLpBox(lpOutBuild, extractOutBuild))
-      throw new Error("Lp box is not valid");
+      throw new DexySDKError("Lp box is not valid");
 
     const tx_builder = new TransactionBuilder(this.HEIGHT)
       .from(inputs)

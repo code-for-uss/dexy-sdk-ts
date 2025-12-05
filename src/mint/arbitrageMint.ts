@@ -10,13 +10,14 @@ import {
   TransactionBuilder,
 } from "@fleet-sdk/core";
 import { SConstant, SInt, SLong } from "@fleet-sdk/serializer";
+import { DexySDKError } from "../errors";
 
 class ArbitrageMint extends Dexy {
   private readonly T_arb = 30n;
   private readonly T_buffer = 5n;
 
-  constructor(oracleBox: Box<Amount>, lpBox: Box<Amount>) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+  constructor(oracleBox: Box<Amount>, oracleRateDivisor: bigint, lpBox: Box<Amount>) {
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
   }
 
   createArbitrageMintTransaction(
@@ -38,7 +39,7 @@ class ArbitrageMint extends Dexy {
 
     const availableToMint = this.availableToMint(arbitrageMintIn, HEIGHT);
     if (mintValue > availableToMint)
-      throw new Error("Mint Value is more than available to mint");
+      throw new DexySDKError("Mint Value is more than available to mint");
     else {
       const buybackInWithContext = new ErgoUnsignedInput(
         buybackIn,
@@ -55,7 +56,7 @@ class ArbitrageMint extends Dexy {
         return a + b.value;
       }, 0n);
       if (userFund < this.ergNeeded(mintValue))
-        throw new Error("Not enough ERG in user boxes");
+        throw new DexySDKError("Not enough ERG in user boxes");
       const arbitrageMintOut = new OutputBuilder(
         arbitrageMintIn.value,
         arbitrageMintIn.ergoTree,
@@ -102,18 +103,18 @@ class ArbitrageMint extends Dexy {
           HEIGHT,
         )
       )
-        throw new Error("Invalid successor");
+        throw new DexySDKError("Invalid successor");
       else if (
         !this.validDelta(bankIn, bankBoxOutBuild, buybackIn, buybackBoxOutBuild)
       )
-        throw new Error("Invalid delta");
+        throw new DexySDKError("Invalid delta");
       else if (
         !this.validAmount(bankIn, bankBoxOutBuild, arbitrageMintIn, HEIGHT)
       )
-        throw new Error("Invalid amount");
+        throw new DexySDKError("Invalid amount");
       else if (!this.validDelay(tracking101In, HEIGHT))
-        throw new Error("Invalid delay");
-      else if (!this.validThreshold()) throw new Error("Invalid threshold");
+        throw new DexySDKError("Invalid delay");
+      else if (!this.validThreshold()) throw new DexySDKError("Invalid threshold");
 
       return new TransactionBuilder(HEIGHT)
         .from(inputs)

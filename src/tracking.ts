@@ -10,6 +10,7 @@ import {
 import { decode } from "@fleet-sdk/serializer";
 import { Dexy } from "./mint/dexy";
 import { SInt } from "@fleet-sdk/serializer";
+import { DexySDKError } from "./errors";
 
 // TODO: should be test
 class Tracking extends Dexy {
@@ -22,13 +23,14 @@ class Tracking extends Dexy {
 
   constructor(
     oracleBox: Box<Amount>,
+    oracleRateDivisor: bigint,
     lpBox: Box<Amount>,
     trackingInBox: Box<Amount>,
     userInBoxes: Box<Amount>[],
     user_address: ErgoAddress,
     HEIGHT: number,
   ) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
     this.trackingIn = ensureUTxOBigInt(trackingInBox);
     this.userBoxes = userInBoxes.map((userBox) => ensureUTxOBigInt(userBox));
     this.user_address = user_address;
@@ -41,7 +43,7 @@ class Tracking extends Dexy {
     const userFund = this.userBoxes.reduce((a, b) => {
       return a + b.value;
     }, 0n);
-    if (userFund < tx_fee) throw new Error("user fund is not enough");
+    if (userFund < tx_fee) throw new DexySDKError("user fund is not enough");
 
     const trackingBoxOut = new OutputBuilder(
       this.trackingIn.value,
@@ -64,13 +66,13 @@ class Tracking extends Dexy {
     outputs.add(trackingBoxOut);
 
     if (!this.correctAction(trackingBoxOutBuild, this.HEIGHT))
-      throw new Error("Invalid action");
+      throw new DexySDKError("Invalid action");
     else if (this.numOut(trackingBoxOutBuild) !== this.numIn())
-      throw new Error("Invalid numOut");
+      throw new DexySDKError("Invalid numOut");
     else if (this.denomOut(trackingBoxOutBuild) !== this.denomIn())
-      throw new Error("Invalid denomOut");
+      throw new DexySDKError("Invalid denomOut");
     else if (this.isBelowOut(trackingBoxOutBuild) !== this.isBelowIn())
-      throw new Error("Invalid isBelowOut");
+      throw new DexySDKError("Invalid isBelowOut");
 
     return new TransactionBuilder(this.HEIGHT)
       .from(inputs)

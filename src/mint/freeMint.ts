@@ -10,13 +10,14 @@ import {
   TransactionBuilder,
 } from "@fleet-sdk/core";
 import { SConstant, SInt, SLong } from "@fleet-sdk/serializer";
+import { DexySDKError } from "../errors";
 
 class FreeMint extends Dexy {
   private readonly T_free = 360n;
   private readonly T_buffer = 5n;
 
-  constructor(oracleBox: Box<Amount>, lpBox: Box<Amount>) {
-    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox));
+  constructor(oracleBox: Box<Amount>, oracleRateDivisor: bigint, lpBox: Box<Amount>) {
+    super(ensureUTxOBigInt(oracleBox), ensureUTxOBigInt(lpBox), oracleRateDivisor);
   }
 
   createFreeMintTransaction(
@@ -32,7 +33,7 @@ class FreeMint extends Dexy {
     const freeMintIn = ensureUTxOBigInt(freeMintInBox);
     const availableToMint = this.availableToMint(freeMintIn, HEIGHT);
     if (mintValue > availableToMint)
-      throw new Error("Mint Value is more than available to mint");
+      throw new DexySDKError("Mint Value is more than available to mint");
     else {
       const bankIn = ensureUTxOBigInt(bankInBox);
       const buybackIn = ensureUTxOBigInt(buybackInBox);
@@ -53,7 +54,7 @@ class FreeMint extends Dexy {
         return a + b.value;
       }, 0n);
       if (userFund < this.ergNeeded(mintValue))
-        new Error("Not enough ERG in user boxes");
+        new DexySDKError("Not enough ERG in user boxes");
 
       const freeMintOut = new OutputBuilder(
         freeMintIn.value,
@@ -101,15 +102,15 @@ class FreeMint extends Dexy {
           HEIGHT,
         )
       )
-        throw new Error("Invalid successor");
+        throw new DexySDKError("Invalid successor");
       else if (
         !this.validDelta(bankIn, bankBoxOutBuild, buybackIn, buybackBoxOutBuild)
       )
-        throw new Error("Invalid delta");
+        throw new DexySDKError("Invalid delta");
       else if (!this.validRateFreeMint())
-        throw new Error("Invalid free mint rate");
+        throw new DexySDKError("Invalid free mint rate");
       else if (!this.validAmount(bankIn, bankBoxOutBuild, freeMintIn, HEIGHT))
-        throw new Error("Invalid amount");
+        throw new DexySDKError("Invalid amount");
 
       return new TransactionBuilder(HEIGHT)
         .from(inputs)
